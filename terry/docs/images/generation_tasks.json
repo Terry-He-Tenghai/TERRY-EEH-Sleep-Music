@@ -1,0 +1,14 @@
+{
+  "architecture": {
+    "id": "7df1092b-3eba-4897-8f04-5ceed15ac58e",
+    "status": "completed",
+    "model": "gpt-image-2",
+    "file": "architecture.png"
+  },
+  "ml_pipeline": {
+    "id": "7bb1d71b-dc84-45f8-ae06-0c556a4cf638",
+    "status": "completed",
+    "model": "gpt-image-2",
+    "file": "ml_pipeline.png"
+  }
+}

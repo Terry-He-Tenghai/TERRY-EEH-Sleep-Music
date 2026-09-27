@@ -1,0 +1,12 @@
+feature,standardized_coefficient
+frontal_beta_log,-0.8064183956853718
+central_sigma_log,0.8050305393744372
+posterior_alpha_theta_log_ratio,-0.5713047962221782
+central_theta_log,0.4847630463060081
+frontocentral_delta_log,-0.41498234343703383
+frontal_beta_log_slope_1m,0.3329528213078565
+posterior_alpha_log,-0.2634351094131746
+posterior_alpha_theta_log_ratio_slope_1m,0.14814135031357223
+central_theta_log_slope_1m,-0.13623357678856568
+signal_quality,0.11596108106213342
+posterior_alpha_log_slope_1m,0.043565440494082064

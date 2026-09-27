@@ -1,0 +1,86 @@
+# Python environments and caches
+.venv/
+.venv-uv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Frontend dependencies and build output
+frontEnd/node_modules/
+frontEnd/dist/
+frontEnd/test-results/
+frontEnd/playwright-report/
+
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local configuration, credentials, and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# ANPHY-Sleep source and derived datasets
+backEnd/data/
+*.zip
+*.zip.part
+*.edf
+*.bdf
+*.fif
+*.parquet
+
+# Generated analysis output is ignored by default
+backEnd/results/*
+
+# Keep publication-ready figures, tables, and manifest
+!backEnd/results/paper/
+!backEnd/results/paper/**
+
+# Keep lightweight top-level summary artifacts
+!backEnd/results/*.csv
+!backEnd/results/*.png
+!backEnd/results/*.pdf
+!backEnd/results/*.json
+
+# Keep only the small models needed by replay and realtime deployment
+!backEnd/results/models/
+backEnd/results/models/*
+!backEnd/results/models/future_n2_logistic_continuous.joblib
+!backEnd/results/models/sleep_state_logistic_30s.joblib
+!backEnd/results/models/logistic_regression.joblib
+!backEnd/results/models/sleep_state_logistic.joblib
+
+# Keep hardware-cap deployment models in a separate results tree
+!backEnd/results/hardware/
+backEnd/results/hardware/*
+!backEnd/results/hardware/models/
+backEnd/results/hardware/models/*
+!backEnd/results/hardware/models/future_n2_logistic_continuous.joblib
+!backEnd/results/hardware/models/sleep_state_logistic_30s.joblib
+
+# Downloaded BabySlakh source dataset (local-only; do not publish audio)
+assest/babyslakh_16k.tar/
+assest/babyslakh_16k.tar.gz
+
+# Local operator-reviewed audio and licensing records (never auto-publish)
+backEnd/music/
+
+# Local device run exports (may contain raw or identifiable EEG records)
+eeg_sleep_output_*/
+eeg_focus_balanced_output_*/
+

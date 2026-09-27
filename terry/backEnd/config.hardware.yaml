@@ -1,0 +1,111 @@
+project:
+  random_seed: 42
+
+data:
+  raw_dir: data/raw
+  reference_dir: data/reference
+  processed_dir: data/processed_hardware
+  results_dir: results/hardware
+
+channels:
+  # CH0-CH15 of the physical 16-channel cap, in device order.
+  target:
+    - C3
+    - C4
+    - Cz
+    - FC3
+    - FC4
+    - CP3
+    - CP4
+    - FCz
+    - CPz
+    - Fz
+    - P3
+    - Pz
+    - P4
+    - O1
+    - Oz
+    - O2
+  aliases: {}
+  regions:
+    frontal: [Fz, FC3, FCz, FC4]
+    central: [C3, Cz, C4, CP3, CPz, CP4]
+    posterior: [P3, Pz, P4, O1, Oz, O2]
+
+signal:
+  target_sfreq_hz: 250
+  # Original model training: 0.5-50 Hz preserves delta band for N2 detection
+  highpass_hz: 0.5
+  lowpass_hz: 50.0
+  notch_frequency_hz: 50.0
+  notch_quality_factor: 30.0
+  line_frequency_hz: 50.0
+  reference: average
+  amplitude_reject_uv: 500.0
+  robust_rms_z_threshold: 6.0
+
+epoching:
+  window_seconds: 6.0
+  step_seconds: 3.0
+  pre_n2_minutes: 20.0
+  post_n2_minutes: 10.0
+  stable_n2_seconds: 60.0
+  slope_history_seconds: 60.0
+  prediction_horizon_seconds: 300.0
+
+bands:
+  delta: [0.5, 4.0]
+  theta: [4.0, 8.0]
+  alpha: [8.0, 12.0]
+  sigma: [12.0, 16.0]
+  beta: [13.0, 30.0]
+  high_beta: [20.0, 30.0]
+
+quality:
+  minimum_clean_channel_fraction: 0.75
+  minimum_clean_window_fraction: 0.8
+
+prediction:
+  models: [logistic_regression, random_forest, svm]
+  sustained_detection_seconds: 30.0
+  probability_threshold: 0.5
+
+realtime:
+  schema_version: "1.0"
+  baseline_seconds: 300.0
+  input_unit: V
+  require_target_sample_rate: true
+  music_controller: adaptive
+
+music:
+  # Runtime generation/playback is opt-in; use local reviewed assets for experiments.
+  enabled: false
+  cache_file: results/hardware/music/cache.json
+  approved_only: true
+  player_backend: "null"
+  engine: layered
+  bpm: 60
+  phrase_beats: 16
+  result_source: poll
+  poll_interval_seconds: 30
+  poll_timeout_seconds: 360
+  suno:
+    base_url: "https://api.sunoapi.org"
+    model: "V5_5"
+    callback_url: "https://example.com/suno/callback"
+  policy:
+    decision_interval_seconds: 30.0
+    confirmations_required: 2
+    minimum_mode_dwell_seconds: 60.0
+    minimum_signal_quality: 0.75
+    ignore_signal_quality: true
+    n1_probability: 0.55
+    n2_probability: 0.65
+    future_n2_probability: 0.65
+    relaxed_alpha_z: 0.5
+    relaxed_beta_z: 0.0
+    transition_theta_z: 0.5
+    micro_arousal_beta_z: 2.0
+    micro_arousal_w_probability: 0.45
+    micro_arousal_cooldown_seconds: 120.0
+    crossfade_seconds: 25.0

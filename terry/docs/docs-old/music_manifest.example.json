@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "tracks": [
+    {
+      "id": "quiet-pad-01",
+      "title": "柔和持续音色（待听审示例）",
+      "styles": ["ambient"],
+      "file": "ambient/quiet-pad.mp3",
+      "purpose": "手动低音量试听舒适度；不保证助眠或治疗效果",
+      "source": "请填写真实创作或生成来源、日期及版本",
+      "license": "",
+      "review": {
+        "status": "pending",
+        "reviewed_by": "",
+        "reviewed_at": null,
+        "copyright_checked": false,
+        "audio_checked": false,
+        "notes": "示例不是已审核素材。请全曲听审、确认授权并填写真实记录。"
+      }
+    }
+  ]
+}
