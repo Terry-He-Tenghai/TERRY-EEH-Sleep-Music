@@ -84,16 +84,16 @@ def test_sixteen_channel_display_denoises_each_channel_without_changing_raw_inpu
         assert np.std(displayed[channel, rate * 2:]) > 5
 
 
-def test_live_reduced_montage_blocks_legacy_classifier():
+def test_live_unsupported_montage_blocks_classifier():
     from adaptive_web import AdaptiveWebService, _Session
 
     events = []
     adaptive = AdaptiveWebService(events.append)
-    ctx = _Session(1, 'LIVE', 250, web.CAP_CHANNEL_NAMES[:8])
+    ctx = _Session(1, 'LIVE', 250, web.CAP_CHANNEL_NAMES[:7])
     adaptive._session = ctx
     adaptive._process(ctx)
     assert events[-1]['status'] == 'blocked'
-    assert events[-1]['reason'] == 'live_inference_requires_16_channels'
+    assert events[-1]['reason'] == 'live_inference_requires_8_or_16_channels'
     assert events[-1]['probabilities'] is None
 
 
@@ -104,7 +104,7 @@ def test_live_cap_montage_does_not_masquerade_as_existing_model(monkeypatch):
     monkeypatch.setenv('TERRY_EEG_CHANNEL_MAP_CONFIRMED', '1')
     events = []
     adaptive = AdaptiveWebService(events.append)
-    ctx = _Session(1, 'LIVE', 250, web.CAP_CHANNEL_NAMES)
+    ctx = _Session(1, 'LIVE', 250, tuple(reversed(web.CAP_CHANNEL_NAMES)))
     adaptive._session = ctx
     adaptive._process(ctx)
     assert events[-1]['status'] == 'blocked'
@@ -112,7 +112,7 @@ def test_live_cap_montage_does_not_masquerade_as_existing_model(monkeypatch):
     assert events[-1]['probabilities'] is None
 
 
-def test_experimental_mapping_reaches_model_baseline_with_verified_cap(monkeypatch):
+def test_live_cap_collects_spectral_window_without_model_baseline(monkeypatch):
     from adaptive_web import AdaptiveWebService, _Session
 
     monkeypatch.setenv('TERRY_EEG_EXPERIMENTAL_16CH_MAPPING', '1')
@@ -124,16 +124,16 @@ def test_experimental_mapping_reaches_model_baseline_with_verified_cap(monkeypat
 
     def publish(event):
         events.append(event)
-        if event.get('reason') == 'collecting_baseline_and_state_windows':
+        if event.get('reason') == 'collecting_eeg_window':
             ctx.cancelled.set()
 
     adaptive._publish = publish
     adaptive._process(ctx)
     assert events[-1]['status'] == 'waiting'
-    assert events[-1]['reason'] == 'collecting_baseline_and_state_windows'
+    assert events[-1]['reason'] == 'collecting_eeg_window'
 
 
-def test_experimental_mapping_rejects_unconfirmed_cap(monkeypatch):
+def test_spectral_path_does_not_require_experimental_model_mapping(monkeypatch):
     from adaptive_web import AdaptiveWebService, _Session
 
     monkeypatch.setenv('TERRY_EEG_EXPERIMENTAL_16CH_MAPPING', '1')
@@ -142,9 +142,14 @@ def test_experimental_mapping_rejects_unconfirmed_cap(monkeypatch):
     adaptive = AdaptiveWebService(events.append)
     ctx = _Session(1, 'LIVE', 250, web.CAP_CHANNEL_NAMES)
     adaptive._session = ctx
+    def capture(event):
+        events.append(event)
+        ctx.cancelled.set()
+    adaptive._publish = capture
     adaptive._process(ctx)
-    assert events[-1]['status'] == 'blocked'
-    assert events[-1]['reason'].startswith('physical_channel_map_unconfirmed')
+    assert events[-1]['status'] == 'waiting'
+    assert events[-1]['inference_mode'] == 'spectral_heuristic'
+    assert events[-1]['probability_origin'] == 'eeg_spectral_heuristic_unvalidated'
 
 
 def test_live_sixteen_channel_model_mismatch_cannot_start_ace(monkeypatch):
@@ -155,7 +160,7 @@ def test_live_sixteen_channel_model_mismatch_cannot_start_ace(monkeypatch):
     service = web.AcquisitionService()
     service._channels = web.CAP_CHANNEL_NAMES
     service._adaptive_generation = 1
-    ctx = _Session(1, 'LIVE', 250, web.CAP_CHANNEL_NAMES)
+    ctx = _Session(1, 'LIVE', 250, tuple(reversed(web.CAP_CHANNEL_NAMES)))
     service._adaptive._session = ctx
     service._adaptive._last = service._adaptive._empty_event(1, 'LIVE')
     web.ace_automatic.start(1, 'ambient')

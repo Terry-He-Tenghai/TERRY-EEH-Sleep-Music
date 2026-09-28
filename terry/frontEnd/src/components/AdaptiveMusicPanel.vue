@@ -17,16 +17,17 @@ const classifierState = computed(() => props.event?.state || {})
 const futureN2 = computed(() => Number.isFinite(classifierState.value.n2_within_5m_probability) ? classifierState.value.n2_within_5m_probability : null)
 const baselineReady = computed(() => classifierState.value.baseline_ready === true)
 const inferenceBlocked = computed(() => ['blocked', 'error', 'frozen'].includes(props.event?.status))
-const baselineLabel = computed(() => scripted.value ? '动态演示不使用基线' : inferenceBlocked.value ? '已阻塞' : props.event?.status === 'stopped' ? '已停止' : !props.event?.state ? '尚未开始' : baselineReady.value ? '已就绪' : '采集中')
+const baselineLabel = computed(() => scripted.value ? '动态演示不使用基线' : props.event?.inference_mode === 'spectral_heuristic' ? '频谱估计不使用基线' : inferenceBlocked.value ? '已阻塞' : props.event?.status === 'stopped' ? '已停止' : !props.event?.state ? '尚未开始' : baselineReady.value ? '已就绪' : '采集中')
 const inferenceStatus = computed(() => scripted.value ? '预设演示，未运行分类器' : inferenceBlocked.value ? '推理已阻塞' : ({ ok: '分类结果已返回', warming_up: '特征预热中', signal_invalid: '信号无效' }[classifierState.value.status] || backendReason.value))
 const featureDefinitions = [
   ['frontal_beta_z', '额区 β 基线偏差'], ['posterior_alpha_z', '后部 α 基线偏差'],
   ['central_theta_z', '中央 θ 基线偏差'], ['central_sigma_z', '中央 σ 基线偏差'],
   ['frontocentral_delta_z', '额中央 δ 基线偏差'], ['alpha_theta_slope_1m', 'α/θ 1 分钟斜率'],
 ]
+const spectralFeatures = [['delta_ratio', 'δ 相对功率'], ['theta_ratio', 'θ 相对功率'], ['alpha_ratio', 'α 相对功率'], ['sigma_ratio', 'σ 相对功率'], ['beta_ratio', 'β 相对功率']]
 const interpretableFeatures = computed(() => {
   const values = props.event?.interpretable_features || {}
-  return featureDefinitions.map(([key, label]) => ({ key, label, value: Number.isFinite(values[key]) ? values[key] : null }))
+  return (props.event?.inference_mode === 'spectral_heuristic' ? spectralFeatures : featureDefinitions).map(([key, label]) => ({ key, label, value: Number.isFinite(values[key]) ? values[key] : null }))
 })
 const featureWidth = value => `${Math.min(100, Math.abs(value || 0) / 3 * 100)}%`
 const probabilities = computed(() => {
@@ -67,6 +68,8 @@ function probabilityPoints(key) {
   return segments
 }
 const reasonLabels = {
+  collecting_eeg_window: '正在收集 6 秒脑电窗口', eeg_spectral_heuristic_unvalidated: '频谱分类估计已返回，未经验证',
+  live_inference_requires_8_or_16_channels: '实时分类需要 8 或 16 路脑电信号',
   initializing_inference: '正在加载模型', collecting_baseline_and_state_windows: '等待基线与状态窗口',
   collecting_clean_baseline: '正在收集清洁基线，当前配置300秒；信号质量会影响准备时间',
   warming_up_inference_features: '推理特征预热中', collecting_state_probability_windows: '正在累计分类窗口',
@@ -149,7 +152,7 @@ defineExpose({ arm, stop })
     <section class="classifier-card" aria-labelledby="classifier-title">
       <div class="classifier-heading"><div><h3 id="classifier-title">{{ scripted ? '预设状态' : '分类状态' }}</h3></div><span class="classifier-status">{{ inferenceStatus }}</span></div>
       <div class="classification-summary"><div><span>当前状态</span><strong>{{ classification }}</strong></div><div><span>N2（5分钟）</span><strong>{{ futureN2 === null ? '不可用' : `${(futureN2 * 100).toFixed(1)}%` }}</strong></div><div><span>基线</span><strong>{{ baselineLabel }}</strong></div><div><span>窗口</span><strong>{{ Number.isFinite(event?.eeg_timestamp_s) ? `${event.eeg_timestamp_s.toFixed(1)} s` : '—' }}</strong></div></div>
-      <aside v-if="event?.channel_repair" class="notice compact-notice" role="status"><strong>{{ event.channel_repair.imputed_channels?.length ? '均值补全' : '电极质量' }}</strong><span> · 有效 {{ event.channel_repair.valid_channels?.length ?? 0 }} / 16</span><details><summary>质量详情</summary><p v-if="event.channel_repair.imputed_channels?.length">补全：{{ event.channel_repair.imputed_channels.join('、') }}。补全不是实际测量，分类准确率尚未验证。</p><p>检查约每6秒更新；波形有线条不等于质量合格。时间 {{ qcNumber(event.channel_repair.window_end_s) }} 秒。</p><details v-if="event.channel_repair.channels?.length"><summary>逐通道诊断</summary><div style="overflow-x:auto"><table style="width:100%;text-align:left"><thead><tr><th>电极</th><th>判断</th><th>峰峰值</th><th>范围</th><th>平直</th></tr></thead><tbody><tr v-for="item in event.channel_repair.channels" :key="item.channel"><td>{{ item.channel }}</td><td>{{ qcReasonLabels[item.reason] || item.reason }}</td><td>{{ qcNumber(item.raw_peak_to_peak_uv) }}</td><td>{{ qcNumber(item.detrended_range_uv) }}</td><td>{{ item.flat_fraction == null ? '—' : `${(item.flat_fraction * 100).toFixed(1)}%` }}</td></tr></tbody></table></div></details></details></aside>
+      <aside v-if="event?.channel_repair" class="notice compact-notice" role="status"><strong>{{ event.channel_repair.imputed_channels?.length ? '均值补全' : '电极质量' }}</strong><span> · 有效 {{ event.channel_repair.valid_channels?.length ?? 0 }} / {{ event.channel_repair.channels?.length ?? 16 }}</span><details><summary>质量详情</summary><p v-if="event.channel_repair.imputed_channels?.length">补全：{{ event.channel_repair.imputed_channels.join('、') }}。补全不是实际测量，分类准确率尚未验证。</p><p>检查约每6秒更新；波形有线条不等于质量合格。时间 {{ qcNumber(event.channel_repair.window_end_s) }} 秒。</p><details v-if="event.channel_repair.channels?.length"><summary>逐通道诊断</summary><div style="overflow-x:auto"><table style="width:100%;text-align:left"><thead><tr><th>电极</th><th>判断</th><th>峰峰值</th><th>范围</th><th>平直</th></tr></thead><tbody><tr v-for="item in event.channel_repair.channels" :key="item.channel"><td>{{ item.channel }}</td><td>{{ qcReasonLabels[item.reason] || item.reason }}</td><td>{{ qcNumber(item.raw_peak_to_peak_uv) }}</td><td>{{ qcNumber(item.detrended_range_uv) }}</td><td>{{ item.flat_fraction == null ? '—' : `${(item.flat_fraction * 100).toFixed(1)}%` }}</td></tr></tbody></table></div></details></details></aside>
       <p v-if="inferenceBlocked" role="alert">{{ backendReason }}。波形采集成功不表示分类已开始。</p><p v-if="resultStale" role="status">分类数据超过15秒未更新，仅显示上次记录。</p>
       <details class="classifier-details"><summary>分类概率与特征</summary><div class="probabilities" aria-label="睡眠状态概率"><div v-for="item in probabilities" :key="item.key"><label :for="`adaptive-prob-${item.key}`">{{ item.key }} <span>{{ item.value === null ? '不可用' : `${(item.value * 100).toFixed(1)}%` }}</span></label><meter :id="`adaptive-prob-${item.key}`" min="0" max="1" :value="item.value ?? 0" :aria-label="`${item.key} 概率`" /></div><p>质量 <strong>{{ quality }}</strong> · 最高概率 {{ confidence }}</p></div><div class="feature-grid"><div v-for="item in interpretableFeatures" :key="item.key" class="feature-item"><label><span>{{ item.label }}</span><strong>{{ item.value === null ? '不可用' : item.value.toFixed(2) }}</strong></label><div class="feature-track"><i v-if="item.value !== null" :style="{ width: featureWidth(item.value), transform: item.value < 0 ? 'translateX(-100%)' : 'none' }" :class="{ negative: item.value < 0 }" /></div></div></div></details>
     </section>

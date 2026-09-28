@@ -1,8 +1,7 @@
 """Bounded raw-EEG adapter producing arrangement plans, never audio playback.
 
-Hardware channel order requires TERRY_EEG_CHANNEL_MAP_CONFIRMED=1 after the
-operator verifies CH0–CH15 against config.hardware.yaml. This is an explicit
-operator assertion, not automatic validation of electrode placement.
+Live 8/16-channel feedback uses measured-channel spectral heuristics with an
+explicit unvalidated origin. The demo model path retains its trained montage.
 """
 from __future__ import annotations
 
@@ -37,6 +36,8 @@ class _Session:
     uploaded_track_id: str | None = None
     stem_track_id: StemTrackId | None = None
     demo_profile: Literal['model', 'showcase'] = 'model'
+    classification_channels: Literal[8, 16] = 16
+    music_source: Literal['stems', 'upload', 'ace'] = 'stems'
     chunks: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=32))
     cancelled: threading.Event = field(default_factory=threading.Event)
     started_at: float = field(default_factory=time.monotonic)
@@ -78,7 +79,9 @@ class AdaptiveWebService:
         with self._lock:
             return copy.deepcopy(self._last)
 
-    def start(self, mode: str, rate: int, channels: tuple[str, ...], music_style: str = 'all', uploaded_track_id: str | None = None, stem_track_id: StemTrackId | None = None, *, demo_profile: Literal['model', 'showcase'] = 'model') -> int:
+    def start(self, mode: str, rate: int, channels: tuple[str, ...], music_style: str = 'all', uploaded_track_id: str | None = None, stem_track_id: StemTrackId | None = None, *, demo_profile: Literal['model', 'showcase'] = 'model', classification_channels: int = 16, music_source: Literal['stems', 'upload', 'ace'] = 'stems') -> int:
+        if classification_channels not in (8, 16):
+            raise ValueError('classification_channels must be 8 or 16')
         if demo_profile not in ('model', 'showcase'):
             raise ValueError('Unknown demo profile')
         if demo_profile == 'showcase' and (mode != 'demo' or rate != 250):
@@ -87,7 +90,7 @@ class AdaptiveWebService:
             if self._session:
                 self._session.cancelled.set()
             self._generation += 1
-            ctx = _Session(self._generation, "LIVE" if mode == "brainflow" else "DEMO", rate, channels, music_style, uploaded_track_id, stem_track_id, demo_profile=demo_profile)
+            ctx = _Session(self._generation, "LIVE" if mode == "brainflow" else "DEMO", rate, channels, music_style, uploaded_track_id, stem_track_id, demo_profile=demo_profile, classification_channels=classification_channels, music_source=music_source)
             self._session = ctx
             self._last = self._empty_event(ctx.generation, ctx.source)
             self._emit(ctx, status="waiting", reason="initializing_inference")
@@ -151,10 +154,10 @@ class AdaptiveWebService:
                 self._fail(ctx, "blocked", "invalid_or_oversized_chunk_restart_required")
                 return
             received = time.monotonic()
-            if ctx.last_received is None and received - ctx.started_at > 30.0:
+            if ctx.source != 'LIVE' and ctx.last_received is None and received - ctx.started_at > 30.0:
                 self._fail(ctx, "blocked", "first_sample_timeout_restart_required")
                 return
-            if ctx.last_received is not None and received - ctx.last_received > 2.0:
+            if ctx.source != 'LIVE' and ctx.last_received is not None and received - ctx.last_received > 2.0:
                 self._fail(ctx, "frozen", "acquisition_gap_restart_required")
                 return
             ctx.last_received = received
@@ -333,30 +336,185 @@ class AdaptiveWebService:
                     plan_updated=True)
                 next_emit_sample += 750
 
+    def _process_live_fallback(self, ctx: _Session) -> None:
+        """Keep the live loop usable without representing heuristics as trained ML."""
+        from channel_mapping import CAP_ORDER
+        from channel_repair import repair_channels
+        from degraded_classifier import classify_window, sanitize_channels
+        from pretrained_classifier import PretrainedClassifier
+        pretrained = PretrainedClassifier(ctx.channels, ctx.rate)
+        from eeg_music_modulation import EegMusicModulator
+        from anphy_sleep.music_engine.scheduler import MusicScheduler
+        from anphy_sleep.contracts import StateUpdate
+
+        selected = tuple(name for name in ("Fp1", "Fp2", "C3", "C4", "P7", "P8", "O1", "O2") if name in ctx.channels)
+        if ctx.classification_channels == 16 or len(ctx.channels) == 8:
+            selected = ctx.channels
+        scheduler = MusicScheduler(minimum_signal_quality=0.0)
+        modulator = EegMusicModulator()
+        expected_sample = 0
+        pending = np.empty((len(ctx.channels), 0))
+        previous_timestamp = None
+        previous_package = None
+        self._emit(ctx, status="waiting", reason="collecting_eeg_window",
+                   inference_mode="spectral_heuristic", probability_origin="eeg_spectral_heuristic_unvalidated",
+                   classification_channels=ctx.classification_channels)
+        while not ctx.cancelled.is_set():
+            try:
+                samples, start, rate, timestamps, received, package_ids = ctx.chunks.get(timeout=.25)
+            except queue.Empty:
+                with self._lock:
+                    now = time.monotonic()
+                    stale = ((ctx.last_received is None and now - ctx.started_at > 30)
+                             or (ctx.last_received is not None and now - ctx.last_received > 2))
+                    if stale and self._last.get('reason') != 'waiting_for_live_data':
+                        pending = np.empty((len(ctx.channels), 0))
+                        previous_timestamp = previous_package = None
+                        scheduler.history.clear()
+                        modulator = EegMusicModulator()
+                        pretrained.reset()
+                        self._emit(ctx, status='frozen', reason='waiting_for_live_data', pretrained=None,
+                                   state=None, probabilities=None, playback_mode='silent',
+                                   notes=[], selected_track=None, channel_repair=None,
+                                   signal_quality=None)
+                continue
+            if ctx.cancelled.is_set():
+                return
+            if time.monotonic() - received > 3 or rate != 250 or start != expected_sample or samples.shape[0] != len(ctx.channels):
+                self._fail(ctx, "blocked", "sample_discontinuity_restart_required")
+                return
+            if timestamps is None or timestamps.shape != (samples.shape[1],) or not np.isfinite(timestamps).all():
+                self._fail(ctx, "blocked", "invalid_hardware_timestamps_restart_required")
+                return
+            chain = timestamps if previous_timestamp is None else np.r_[previous_timestamp, timestamps]
+            if np.any(np.diff(chain) < 0) or np.any(np.diff(chain) > 2):
+                self._fail(ctx, "blocked", "hardware_timestamp_discontinuity_restart_required")
+                return
+            previous_timestamp = float(timestamps[-1])
+            if (package_ids is None or package_ids.shape != (samples.shape[1],)
+                    or not np.isfinite(package_ids).all() or np.any(package_ids != np.floor(package_ids))
+                    or np.any(package_ids < 0) or np.any(package_ids > 255)):
+                self._fail(ctx, "blocked", "invalid_hardware_package_counters_restart_required")
+                return
+            counters = package_ids.astype(np.int64)
+            chain = counters if previous_package is None else np.r_[previous_package, counters]
+            if np.any(np.diff(chain) % 256 != 1):
+                # A lost/duplicate packet invalidates this window, not the
+                # entire session. Resume automatically on fresh contiguous data.
+                pending = np.empty((len(ctx.channels), 0))
+                previous_package = int(counters[-1])
+                expected_sample += samples.shape[1]
+                scheduler.history.clear()
+                modulator = EegMusicModulator()
+                pretrained.reset()
+                self._emit(ctx, status='waiting', reason='recollecting_after_packet_gap', pretrained=None,
+                           state=None, probabilities=None, notes=[], selected_track=None,
+                           playback_mode='silent', channel_repair=None, signal_quality=None)
+                continue
+            previous_package = int(counters[-1])
+            expected_sample += samples.shape[1]
+            pending = np.concatenate((pending, samples), axis=1)
+            while pending.shape[1] >= 1500:
+                window = pending[:, :1500]
+                pending = pending[:, 1500:]
+                _, repair = repair_channels(window, ctx.channels, 500., minimum_channels=1,
+                                            sample_rate_hz=rate)
+                repair["window_end_s"] = (expected_sample - pending.shape[1]) / rate
+                _, usable_mask = sanitize_channels(window)
+                available = {name for name, usable in zip(ctx.channels, usable_mask) if usable}
+                clean_channels = set(repair["valid_channels"])
+                # Prefer clean signals, but quality failures alone must not
+                # suppress the availability-first, explicitly unvalidated path.
+                used = [name for name in selected if name in available & clean_channels]
+                if not used:
+                    used = [name for name in ctx.channels if name in available & clean_channels][:ctx.classification_channels]
+                if not used:
+                    used = [name for name in selected if name in available]
+                if not used:
+                    used = [name for name in ctx.channels if name in available][:ctx.classification_channels]
+                repair["quality_passed_channels"] = repair["valid_channels"]
+                repair["valid_channels"] = [name for name in ctx.channels if name in available]
+                repair["valid_fraction"] = len(available) / len(ctx.channels)
+                repair["usable"] = bool(used)
+                repair["low_quality_channels"] = [name for name in used if name not in clean_channels]
+                repair["quality_warning"] = bool(repair["low_quality_channels"])
+                repair["selected_channels"] = list(selected)
+                repair["used_channels"] = used
+                repair["selection_fallback"] = bool(used and not set(used).issubset(selected))
+                repair["mapping"] = "measured_sites_only"
+                # QC returns a mean-imputation report, but this path only uses
+                # original measured channels and never classifies filled rows.
+                repair["excluded_channels"] = [name for name in ctx.channels if name not in used]
+                repair["imputed_channels"] = []
+                repair["method"] = "available_measured_channels_only"
+                try:
+                    model_result = pretrained.update(window, repair['window_end_s'], clean_channels)
+                except Exception:
+                    logger.exception('Pretrained adapter failed; retaining spectral feedback')
+                    pretrained.reset()
+                    model_result = {'model': 'YASA 0.7.0 EEG-only', 'status': 'fallback',
+                                    'reason': 'model_load_or_prediction_failed', 'probabilities': None}
+                if not used:
+                    pretrained.reset()
+                    self._emit(ctx, status="frozen", reason="no_valid_electrodes",
+                               pretrained=model_result,
+                               playback_mode="silent", probabilities=None, notes=[], selected_track=None,
+                               state={"status": "signal_invalid", "baseline_ready": False,
+                                      "window_end_s": repair["window_end_s"], "n2_within_5m_probability": None},
+                               signal_quality=0.0, channel_repair=repair,
+                               timestamp_s=repair["window_end_s"], inference_mode="spectral_heuristic",
+                               probability_origin="eeg_spectral_heuristic_unvalidated")
+                    scheduler.history.clear()
+                    modulator = EegMusicModulator()
+                    continue
+                indices = [ctx.channels.index(name) for name in used]
+                probabilities, spectrum = classify_window(window[indices], rate)
+                quality = len(used) / len(ctx.channels)
+                state = StateUpdate(
+                    session_id=str(ctx.generation), window_end_s=repair["window_end_s"],
+                    signal_quality=quality, status="ok", baseline_ready=False,
+                    n2_within_5m_probability=None, aasm_state_probabilities=probabilities,
+                    interpretable_features={},
+                )
+                frame = scheduler.update(state)
+                music_state = frame.music_state.value
+                notes, gains, waveform, modulation = modulator.apply(state, music_state, 42)
+                track, track_status = self._track(music_state, ctx) if ctx.music_source != 'ace' else (None, 'ace_generation')
+                playable = bool(track) or ctx.music_source == 'ace'
+                self._emit(ctx, status="ready" if playable else "waiting",
+                           reason="eeg_spectral_heuristic_unvalidated" if playable else "conservative_track_missing",
+                           timestamp_s=repair["window_end_s"], playback_mode="adaptive" if playable else "silent",
+                           inference_mode="spectral_heuristic", probability_origin="eeg_spectral_heuristic_unvalidated",
+                           classification_channels=ctx.classification_channels, classification_confirmed=False,
+                           state={"status": "ok", "baseline_ready": False,
+                                  "window_end_s": repair["window_end_s"], "n2_within_5m_probability": None},
+                           probabilities=probabilities, signal_quality=quality, channel_repair=repair,
+                           interpretable_features=spectrum, inference_hold_reason=None,
+                           pretrained=model_result,
+                           music_control_origin='yasa_rolling_unvalidated' if model_result['status'] == 'ready' and ctx.music_source == 'ace' else 'spectral_heuristic',
+                           current_music_state=music_state, target_music_state=model_result['music_target'] if model_result['status'] == 'ready' and ctx.music_source == 'ace' else frame.target_state.value,
+                           notes=notes, gains=gains, waveform=waveform, modulation=modulation,
+                           variation=f"eeg-density-{modulation['density_band']}",
+                           selected_track=track, track_status=track_status,
+                           bpm=scheduler.bpm, phrase_beats=scheduler.phrase_beats,
+                           phrase_index=frame.phrase_index, seed=42, plan_updated=True)
+
     def _process(self, ctx: _Session) -> None:
         from anphy_sleep.config import load_config, load_local_env
 
-        if ctx.source == "LIVE" and len(ctx.channels) != 16:
-            self._fail(ctx, "blocked", "live_inference_requires_16_channels")
+        if ctx.source == "LIVE" and len(ctx.channels) not in (8, 16):
+            self._fail(ctx, "blocked", "live_inference_requires_8_or_16_channels")
             return
         load_local_env(ROOT)
-        experimental_map = ctx.source == "LIVE" and os.getenv("TERRY_EEG_EXPERIMENTAL_16CH_MAPPING") == "1"
-        config, _ = load_config(ROOT / ("config.yaml" if experimental_map else "config.hardware.yaml"))
-        if experimental_map:
-            from channel_mapping import CAP_ORDER, MODEL_ORDER
-            if ctx.channels != CAP_ORDER or tuple(config["channels"]["target"]) != MODEL_ORDER:
-                self._fail(ctx, "blocked", "experimental_channel_mapping_contract_mismatch")
+        if ctx.source == "LIVE":
+            from channel_mapping import CAP_ORDER
+            if ctx.channels != CAP_ORDER and ctx.channels != CAP_ORDER[:8]:
+                self._fail(ctx, "blocked", "configured_channel_order_mismatch")
                 return
-        logger.info("[adaptive] preflight session=%s source=%s rate=%s channel_map_confirmed=%s expected_order=%s",
-                    ctx.generation, ctx.source, ctx.rate,
-                    os.getenv("TERRY_EEG_CHANNEL_MAP_CONFIRMED") == "1", config["channels"]["target"])
-        if not experimental_map and tuple(config["channels"]["target"]) != ctx.channels:
-            self._fail(ctx, "blocked", "configured_channel_order_mismatch")
+            self._process_live_fallback(ctx)
             return
-        if ctx.source == "LIVE" and os.getenv("TERRY_EEG_CHANNEL_MAP_CONFIRMED") != "1":
-            logger.warning("[adaptive] Classification has NOT started: verify physical CH0-CH15 order against config.hardware.yaml, then set TERRY_EEG_CHANNEL_MAP_CONFIRMED=1 in backEnd/.env and restart. Waveform acquisition is independent.")
-            self._fail(ctx, "blocked", "physical_channel_map_unconfirmed_set_TERRY_EEG_CHANNEL_MAP_CONFIRMED_after_verification")
-            return
+        experimental_map = False
+        config, _ = load_config(ROOT / "config.yaml")
         if float(config["signal"]["target_sfreq_hz"]) != 250:
             self._fail(ctx, "blocked", "inference_requires_250_hz_no_resampling")
             return

@@ -26,9 +26,10 @@ export function validateStemFrame(raw, trackId, now = Date.now()) {
   } else if (plan.mode === 'adaptive') {
     const repair = raw.channel_repair
     const imputed = repair?.method === 'available_channel_mean' && repair.experimental === true && repair.usable === true && repair.valid_channels?.length >= 8 && repair.valid_fraction >= .5
-    const qualityFloor = imputed ? .5 : .75
+    const spectral = raw.source === 'LIVE' && raw.inference_mode === 'spectral_heuristic' && raw.probability_origin === 'eeg_spectral_heuristic_unvalidated' && repair?.used_channels?.length >= 1 && Number.isFinite(repair.valid_fraction) && repair.valid_fraction > 0
+    const qualityFloor = spectral ? 0 : imputed ? .5 : .75
     const p = raw.probabilities
-    if (raw.playback_mode !== 'adaptive' || raw.state?.status !== 'ok' || raw.state?.baseline_ready !== true || !p || ['W', 'N1', 'N2'].some(k => !Number.isFinite(p[k]) || p[k] < 0 || p[k] > 1) || Math.abs(p.W + p.N1 + p.N2 - 1) > .01 || !Number.isFinite(raw.signal_quality) || raw.signal_quality < qualityFloor || raw.signal_quality > 1) throw new Error('尚无有效脑电分类，禁止自适应分轨')
+    if (raw.playback_mode !== 'adaptive' || raw.state?.status !== 'ok' || (!spectral && raw.state?.baseline_ready !== true) || !p || ['W', 'N1', 'N2'].some(k => !Number.isFinite(p[k]) || p[k] < 0 || p[k] > 1) || Math.abs(p.W + p.N1 + p.N2 - 1) > .01 || !Number.isFinite(raw.signal_quality) || raw.signal_quality < qualityFloor || raw.signal_quality > 1) throw new Error('尚无有效脑电分类，禁止自适应分轨')
   } else {
     if (raw.playback_mode !== 'conservative' || !raw.channel_repair?.valid_channels?.length) throw new Error('保守分轨仍需有效电极')
   }

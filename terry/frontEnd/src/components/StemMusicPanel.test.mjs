@@ -37,6 +37,21 @@ test('stem events reject stale, wrong track, invalid gain and unready classifica
     const e=event(); mutate(e); assert.throws(() => validateStemFrame(e, 'Track00008'))
   }
 })
+test('live spectral classification permits 8 or 16 channel stem feedback without a trained baseline', () => {
+  for (const count of [8, 16]) {
+    const e = event()
+    e.state.baseline_ready = false
+    e.inference_mode = 'spectral_heuristic'
+    e.probability_origin = 'eeg_spectral_heuristic_unvalidated'
+    e.classification_channels = count
+    e.channel_repair = { used_channels: Array.from({ length: count }, (_, i) => `CH${i}`), valid_fraction: count / 16 }
+    e.signal_quality = count / 16
+    assert.equal(validateStemFrame(e, 'Track00008').mode, 'adaptive')
+    delete e.probability_origin
+    assert.throws(() => validateStemFrame(e, 'Track00008'))
+  }
+})
+
 test('conservative plan has no fabricated EEG control value', () => {
   const e=event(); e.playback_mode='conservative'; e.stem_mix.mode='conservative'; e.stem_mix.control_level=null
   e.stem_mix.gains={piano:.12,strings:.08,bass:.02,pad:.10}

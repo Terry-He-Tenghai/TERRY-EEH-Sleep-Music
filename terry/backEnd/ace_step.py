@@ -72,7 +72,9 @@ class AutomaticMusic:
             valid = (event.get("status") == "ready" and event.get("playback_mode") == "adaptive"
                      and (event.get("state") or {}).get("status") == "ok"
                      and (event.get("classification_confirmed") is True or
-                          (event.get("state") or {}).get("baseline_ready") is True)
+                          (event.get("state") or {}).get("baseline_ready") is True or
+                          (event.get("source") == "LIVE" and event.get("probability_origin") == "eeg_spectral_heuristic_unvalidated"
+                           and (event.get("channel_repair") or {}).get("valid_channels")))
                      and event.get("source") in ("LIVE", "DEMO"))
             if not valid:
                 self.state = {**self.state, "status": "paused", "audio_url": None}

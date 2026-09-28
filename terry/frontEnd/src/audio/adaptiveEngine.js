@@ -52,12 +52,14 @@ export function validateAdaptiveEvent(event) {
   if (!conservative && (!probabilities || !['W', 'N1', 'N2'].every(key => Number.isFinite(probabilities[key]) && probabilities[key] >= 0 && probabilities[key] <= 1) || Math.abs(['W', 'N1', 'N2'].reduce((sum, key) => sum + probabilities[key], 0) - 1) > .01)) throw new Error('睡眠状态概率无效')
   const repair = event.channel_repair
   const meanImputed = repair?.method === 'available_channel_mean' && repair.experimental === true && repair.usable === true && Array.isArray(repair.valid_channels) && repair.valid_channels.length >= 8 && Number.isFinite(repair.valid_fraction) && repair.valid_fraction >= .5
+  const spectral = event.source === 'LIVE' && event.inference_mode === 'spectral_heuristic' && event.probability_origin === 'eeg_spectral_heuristic_unvalidated' && repair?.used_channels?.length >= 1 && Number.isFinite(repair.valid_fraction) && repair.valid_fraction > 0
   if (conservative) {
     if (repair?.method !== 'available_channel_mean' || !Array.isArray(repair.valid_channels) || repair.valid_channels.length < 1 || !Number.isFinite(repair.valid_fraction) || repair.valid_fraction <= 0) throw new Error('保守播放仍需有效电极和新数据')
     const caps = { master: .06, pad: .3, melody: .08, bass: 0, texture: 0 }
     if (!event.gains || Object.entries(caps).some(([key, cap]) => !Number.isFinite(event.gains[key]) || event.gains[key] < 0 || event.gains[key] > cap) || !Array.isArray(event.notes) || event.notes.length > 4 || event.notes.some(note => note.voice !== 'melody' || note.velocity > 35)) throw new Error('保守播放计划超过低增益或稀疏音符限制')
   }
-  const minimumQuality = conservative ? 0 : meanImputed ? .5 : .75
+  const minimumQuality = conservative ? 0 : spectral ? 0 : meanImputed ? .5 : .75
+  if (spectral && event.state?.status !== 'ok') throw new Error('降级脑电分类状态无效')
   if (!Number.isFinite(event.signal_quality) || event.signal_quality < minimumQuality || event.signal_quality > 1) throw new Error('有效电极或信号质量不足，已禁止声音')
   if (!event.track || typeof event.track.id !== 'string' || !event.track.id || event.track.id.length > 200) throw new Error('没有可用本地底轨；禁止单独启动振荡器')
   if (!Array.isArray(event.notes) || event.notes.length > 512) throw new Error('MIDI 计划缺失或过大')

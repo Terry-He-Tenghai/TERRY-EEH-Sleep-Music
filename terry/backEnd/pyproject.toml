@@ -24,7 +24,7 @@ dependencies = [
   "seaborn",
   "soundfile>=0.14.0",
   "statsmodels",
-  "yasa",
+  "yasa==0.7.0",
 ]
 
 [project.optional-dependencies]

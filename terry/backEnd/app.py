@@ -49,6 +49,7 @@ class StartRequest(BaseModel):
     uploaded_track_id: str | None = Field(default=None, pattern=r'^user_[a-f0-9]{32}$')
     stem_track_id: StemTrackId | None = None
     sample_rate_hz: Literal[250, 500, 1000] = 250
+    classification_channels: Literal[8, 16] = 16
 
     @model_validator(mode='after')
     def exclusive_music_source(self):
@@ -144,7 +145,7 @@ class AcquisitionService:
                 sample_rate_hz=self._sample_rate_hz, channels=self._channels,
                 samples_emitted=0, error=None,
             )
-            self._adaptive_generation = self._adaptive.start(request.mode, self._sample_rate_hz, self._channels, request.music_style, request.uploaded_track_id, stem_track_id=request.stem_track_id, demo_profile=request.demo_profile)
+            self._adaptive_generation = self._adaptive.start(request.mode, self._sample_rate_hz, self._channels, request.music_style, request.uploaded_track_id, stem_track_id=request.stem_track_id, demo_profile=request.demo_profile, classification_channels=request.classification_channels, music_source=request.music_source)
             if request.music_source == 'ace':
                 ace_automatic.start(self._adaptive_generation, request.music_style)
             else:

@@ -14,6 +14,7 @@ const sampleRate = ref(250), activeSampleRate = ref(250)
 const verticalScale = ref(200)
 const canvas = ref(null), mode = ref('demo'), ipAddress = ref('192.168.4.1'), gain = ref(24)
 const demoProfile = ref('model')
+const classificationChannels = ref(16)
 const running = ref(false), connected = ref(false), paused = ref(false), displaySeconds = ref(5), error = ref('')
 const waveformError = ref('')
 const samplesEmitted = ref(0), lastTimestamp = ref(0), channelEnabled = ref(CHANNELS.map(() => true))
@@ -77,6 +78,27 @@ const apiBase = import.meta.env.VITE_API_BASE || ''
 const wsBase = import.meta.env.VITE_WS_BASE || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
 const statusText = computed(() => error.value ? '错误' : running.value && mode.value === 'brainflow' ? (connected.value ? '设备采集中' : '正在连接设备') : running.value ? '演示采集中' : '未开始')
 const enabledCount = computed(() => channelEnabled.value.filter(Boolean).length)
+const classificationClock = ref(Date.now())
+const pretrainedReasons = {
+  channel_map_unconfirmed: '尚未确认设备通道接线',
+  reference_unconfirmed_or_unsupported: '参考电极未确认或不符合支持的导联',
+  matching_clean_central_channel_missing: '缺少质量合格且参考匹配的中央电极',
+  matching_channel_missing_samples: '模型所需通道有缺失样本',
+  warming_up_300_seconds: '正在收集连续5分钟模型数据',
+  predicting: '模型正在后台推理，频谱反馈继续',
+  model_load_or_prediction_failed: '模型加载或推理失败，已保留频谱反馈',
+  configuration_error: '模型配置错误，已保留频谱反馈', disabled: '预训练模型已关闭',
+  rolling_prediction_unvalidated: '滚动窗口预测，未经本设备验证',
+}
+const pretrainedReady = computed(() => running.value && adaptiveEvent.value?.pretrained?.status === 'ready' && adaptiveEvent.value?.state?.status === 'ok' && classificationClock.value - adaptiveEvent.value.emitted_at_s * 1000 <= 15000)
+let classificationTimer = null
+const liveClassification = computed(() => {
+  const event = adaptiveEvent.value
+  if (event?.source !== 'LIVE' || event?.state?.status !== 'ok' || event?.probability_origin !== 'eeg_spectral_heuristic_unvalidated' || !Number.isFinite(event.emitted_at_s) || classificationClock.value - event.emitted_at_s * 1000 > 15000) return null
+  const probabilities = event.probabilities
+  if (!probabilities || !['W', 'N1', 'N2'].every(key => Number.isFinite(probabilities[key]))) return null
+  return Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0]
+})
 
 function appendSamples(packet) {
   if (!channelsMatch(packet.channels) || !Array.isArray(packet.samples_uv) || packet.samples_uv.length !== displayChannels.value.length) {
@@ -129,7 +151,7 @@ async function startAcquisition() {
     // Start-click user activation authorizes local audio; no additional MIDI edits.
     adaptivePanel.value?.arm()
     connectSocket(); await nextTick()
-    const response = await fetch(`${apiBase}/api/acquisition/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, demo_profile: mode.value === 'demo' ? demoProfile.value : 'model', ip_address: ipAddress.value, gain: Number(gain.value), sample_rate_hz: Number(sampleRate.value), music_source: musicSource.value, stem_track_id: musicSource.value === 'stems' ? stemTrackId.value : null, music_style: musicSource.value === 'ace' ? aceStyle.value : 'all', uploaded_track_id: musicSource.value === 'upload' ? uploadedTrack.value.id : null }) })
+    const response = await fetch(`${apiBase}/api/acquisition/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, demo_profile: mode.value === 'demo' ? demoProfile.value : 'model', classification_channels: classificationChannels.value, ip_address: ipAddress.value, gain: Number(gain.value), sample_rate_hz: Number(sampleRate.value), music_source: musicSource.value, stem_track_id: musicSource.value === 'stems' ? stemTrackId.value : null, music_style: musicSource.value === 'ace' ? aceStyle.value : 'all', uploaded_track_id: musicSource.value === 'upload' ? uploadedTrack.value.id : null }) })
     const body = await response.json(); if (!response.ok) throw new Error(body.detail || '启动采集失败')
     applyStatus(body); signal.value = displayChannels.value.map(() => []); channelEnabled.value = displayChannels.value.map(() => true); lastTimestamp.value = 0; paused.value = false
     if (!body.streaming) adaptivePanel.value?.stop('acquisition-not-started')
@@ -164,8 +186,8 @@ function draw() {
   for (let i = 0; i < displayChannels.value.length; i += 1) { if (!channelEnabled.value[i] || !signal.value[i].length) continue; const values = centered[i], yCenter = top + rowHeight * i + rowHeight / 2; context.strokeStyle = COLORS[i]; context.lineWidth = 1.2; context.beginPath(); values.forEach((value, index) => { const x = left + ((Math.max(0, Math.round(activeSampleRate.value * displaySeconds.value) - values.length) + index) / Math.max(1, Math.round(activeSampleRate.value * displaySeconds.value) - 1)) * plotWidth; const y = yCenter - Math.max(-rowHeight * .42, Math.min(rowHeight * .42, (value / amplitude) * rowHeight * .38)); if (index === 0) context.moveTo(x, y); else context.lineTo(x, y) }); context.stroke() }
 }
 function resize() { draw() }
-onMounted(() => { loadStemChoices(); refreshAdaptiveStatus(); adaptivePoll = setInterval(refreshAdaptiveStatus, 3000); connectSocket(); window.addEventListener('resize', resize); draw(); animationFrame.value = requestAnimationFrame(function loop() { draw(); animationFrame.value = requestAnimationFrame(loop) }) })
-onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); adaptiveRequest?.abort(); window.removeEventListener('resize', resize); if (animationFrame.value) cancelAnimationFrame(animationFrame.value); ws.value?.close() })
+onMounted(() => { loadStemChoices(); refreshAdaptiveStatus(); adaptivePoll = setInterval(refreshAdaptiveStatus, 3000); classificationTimer = setInterval(() => { classificationClock.value = Date.now() }, 1000); connectSocket(); window.addEventListener('resize', resize); draw(); animationFrame.value = requestAnimationFrame(function loop() { draw(); animationFrame.value = requestAnimationFrame(loop) }) })
+onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInterval(classificationTimer); adaptiveRequest?.abort(); window.removeEventListener('resize', resize); if (animationFrame.value) cancelAnimationFrame(animationFrame.value); ws.value?.close() })
 </script>
 
 <template>
@@ -182,7 +204,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); adaptiveRe
         <div class="music-setup__field">
           <label for="music-source">音频来源</label>
           <select id="music-source" v-model="musicSource" aria-describedby="music-source-help"><option value="ace">AI · 脑电分类生成</option><option value="upload">上传我的音频</option><option value="stems">BabySlakh 原曲分轨 · 脑电混音</option></select>
-          <p id="music-source-help" class="music-setup__help">{{ musicSource === 'ace' ? '有效模型分类与基线就绪后，按状态自动生成并播放。' : musicSource === 'stems' ? '20首原曲分轨混音，不叠加 MIDI。' : '使用上传音频作为固定背景。' }}</p>
+          <p id="music-source-help" class="music-setup__help">{{ musicSource === 'ace' ? (mode === 'brainflow' ? '每6秒根据有效脑电频谱估计触发生成，无需个体基线。' : '有效模型分类后，按状态自动生成并播放。') : musicSource === 'stems' ? '20首原曲分轨混音，不叠加 MIDI。' : '使用上传音频作为固定背景。' }}</p>
         </div>
         <div v-if="musicSource === 'ace'" class="music-setup__field"><label for="ace-style">预设音乐风格</label><select id="ace-style" v-model="aceStyle"><option value="ambient">氛围</option><option value="piano">钢琴</option><option value="nature">自然</option><option value="strings">弦乐</option><option value="electronic">电子</option></select></div>
         <div v-if="musicSource === 'stems'" class="music-setup__field">
@@ -201,7 +223,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); adaptiveRe
         <template v-else><strong>已选择：{{ uploadedTrack.displayName }}</strong><span>本次采集保持此背景，MIDI 声部自动变化。</span></template>
       </div>
       <footer class="music-setup__footer">
-        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类和基线；预设演示不触发生成。远端处理期间保持等待，断流后暂停播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
+        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类；实时模式支持未经验证的频谱估计，预设演示不触发生成。远端处理期间保持等待，断流后暂停播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
       </footer>
       <p v-if="musicChoiceError" class="error-message" role="alert">{{ musicChoiceError }}</p>
     </section>
@@ -224,11 +246,27 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); adaptiveRe
       <div v-if="mode === 'brainflow'" class="control-group"><label for="device-ip">设备 IP</label><input id="device-ip" v-model="ipAddress" :disabled="running" /></div>
       <div class="control-group"><label for="sample-rate">采样率</label><select id="sample-rate" v-model="sampleRate" :disabled="running"><option v-for="rate in [250,500,1000]" :key="rate" :value="rate">{{ rate }} Hz</option></select></div>
       <div v-if="mode === 'brainflow'" class="control-group"><label for="hardware-gain">硬件增益</label><select id="hardware-gain" v-model="gain" :disabled="running"><option v-for="item in [1,2,4,6,8,12,24]" :key="item" :value="item">×{{ item }}</option></select></div>
+      <div v-if="mode === 'brainflow'" class="control-group"><label for="classification-channels">分类通道</label><select id="classification-channels" v-model="classificationChannels" :disabled="running || startingAcquisition"><option :value="8">8 通道</option><option :value="16">16 通道</option></select></div>
       <div class="actions"><button v-if="!running" class="primary" :disabled="startingAcquisition" @click="startAcquisition">{{ startingAcquisition ? '正在启动…' : '开始采集' }}</button><button v-else class="stop" @click="stopAcquisition">停止采集</button></div>
     </section>
     <p class="notice compact-notice">开始采集将启用声音，请先调低设备音量。</p>
     <p v-if="sampleRate !== 250" class="error-message" role="status">自动推理与预设演示需要 250 Hz；请停止采集后切换采样率。</p>
-    <p v-if="mode === 'brainflow'" class="notice" role="status">真实设备采集全部 16 路。可由后端显式启用实验性映射（14 路同名、Fz/Cz 插值）进行分类驱动音乐联调；结果未经此帽位验证，不用于睡眠研究结论。</p>
+    <p v-if="mode === 'brainflow'" class="notice" role="status">真实设备始终采集并显示全部 16 路；分类选择 8 或 16 路实测电极，质量不足时使用其他有效实测电极。分类采用未经临床验证的频谱启发式估计，不代表训练模型或睡眠研究结论。</p>
+    <section v-if="mode === 'brainflow' && running" class="panel demo-setup" aria-label="实时分类反馈">
+      <p role="status">{{ adaptiveEvent?.classification_channels || classificationChannels }} 通道分类 · {{ liveClassification ? `${liveClassification[0]} ${(liveClassification[1] * 100).toFixed(1)}%` : '等待有效脑电窗口' }} · 频谱估计，未经验证</p>
+      <p v-if="liveClassification">W（清醒）{{ (adaptiveEvent.probabilities.W * 100).toFixed(1) }}% · N1（睡眠阶段1）{{ (adaptiveEvent.probabilities.N1 * 100).toFixed(1) }}% · N2（睡眠阶段2）{{ (adaptiveEvent.probabilities.N2 * 100).toFixed(1) }}%</p>
+      <div v-if="adaptiveEvent?.pretrained" aria-label="预训练模型反馈">
+        <p>预训练模型：{{ adaptiveEvent.pretrained.model }} · {{ pretrainedReady ? `当前预测 ${adaptiveEvent.pretrained.stage}` : '使用频谱兜底' }}</p>
+        <p>{{ pretrainedReasons[adaptiveEvent.pretrained.reason] || adaptiveEvent.pretrained.reason }} · 参考 {{ adaptiveEvent.pretrained.reference }}<span v-if="adaptiveEvent.pretrained.channel"> · 电极 {{ adaptiveEvent.pretrained.channel }}</span></p>
+        <p v-if="pretrainedReady"><span v-for="(probability, stage) in adaptiveEvent.pretrained.probabilities" :key="stage">{{ stage }} {{ (probability * 100).toFixed(1) }}%　</span></p>
+        <p>ACE-Step 控制来源：{{ pretrainedReady && adaptiveEvent.music_control_origin === 'yasa_rolling_unvalidated' ? 'YASA 预测（实验性）' : '频谱估计（兜底）' }}。模型五阶段概率单独保留；N3/REM 不冒充 N2。</p>
+      </div>
+      <p v-if="adaptiveEvent?.channel_repair?.quality_warning" role="status">低质量信号降级估计：{{ adaptiveEvent.channel_repair.low_quality_channels.join('、') }}。有分类数值不代表睡眠判断可信，当前仅用于音乐联调。</p>
+      <p v-if="adaptiveEvent?.reason === 'waiting_for_live_data'" role="status">等待设备恢复数据；恢复后自动重新收集分类窗口。</p>
+      <p v-if="adaptiveEvent?.reason === 'recollecting_after_packet_gap'" role="status">检测到丢包或重复包，已丢弃受影响窗口，正在自动重新收集。</p>
+      <p v-if="adaptiveEvent?.reason === 'no_valid_electrodes'" role="status">所有通道均缺少可计算的变化信号；恢复任一路后会自动返回估计。</p>
+      <p v-if="adaptiveEvent?.channel_repair">实际使用：{{ adaptiveEvent.channel_repair.used_channels?.join('、') || '暂无有效电极' }}<span v-if="adaptiveEvent.channel_repair.selection_fallback">（所选电极无效，已改用其他有效电极）</span></p>
+    </section>
     <p v-if="error" class="error-message" role="alert">{{ error }}</p>
     <p v-if="waveformError" class="error-message" role="alert">{{ waveformError }}</p>
     <p v-if="adaptiveConnectionError" class="error-message" role="alert">{{ adaptiveConnectionError }}</p>

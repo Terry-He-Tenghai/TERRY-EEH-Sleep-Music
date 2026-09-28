@@ -8,7 +8,7 @@ data:
   results_dir: results/hardware
 
 channels:
-  # CH0-CH15 of the physical 16-channel cap, in device order.
+  # Legacy training montage; live LK-Mini spectral inference uses CAP_ORDER.
   target:
     - C3
     - C4

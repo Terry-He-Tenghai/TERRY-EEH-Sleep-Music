@@ -1,0 +1,9 @@
+# Operator assertions: verify physical CH0-CH15 wiring and the common reference.
+# Never set these based solely on software channel names.
+enabled: true
+channel_map_confirmed: false
+# Supported measured common references: M1 (C4), M2 (C3), Fpz (C3 or C4).
+# No synthetic mastoid/Fpz channels or average-reference substitution.
+reference: unknown
+# Rolling inference is experimental; not equivalent to full-night validation.
+# 5 minutes minimum, bounded 10 minute history, prediction every 30 seconds.
