@@ -1,0 +1,14 @@
+# Minimal runtime for the waveform LIVE path, using the existing training venv.
+# The complete backend (offline analysis/YASA/etc.) remains specified in pyproject.toml.
+numpy==2.2.6
+scipy==1.15.3
+pyyaml>=6.0
+fastapi>=0.115
+uvicorn[standard]>=0.30
+requests>=2.32
+brainflow>=5.18.1
+pandas
+joblib
+# Match the serialized legacy DEMO joblib models.
+scikit-learn==1.7.2
+# PyTorch 2.6.0 must also be installed; existing CUDA training installation is reused.

@@ -9,7 +9,7 @@ from degraded_classifier import classify_window
 
 
 @pytest.mark.parametrize('channel_count,physical_count', [(8, 8), (8, 16), (16, 16)])
-def test_live_spectral_feedback_uses_selected_measured_channels(channel_count, physical_count):
+def test_legacy_spectral_diagnostic_uses_selected_measured_channels(channel_count, physical_count):
     rate = 250
     seconds = np.arange(rate * 6) / rate
     samples = np.vstack([
@@ -28,7 +28,7 @@ def test_live_spectral_feedback_uses_selected_measured_channels(channel_count, p
     service._publish = capture
     ctx.chunks.put((samples, 0, rate, seconds, time.monotonic(),
                     np.arange(rate * 6) % 256))
-    service._process(ctx)
+    service._process_live_fallback(ctx)  # Legacy diagnostic, not the LIVE dispatch path.
     ready = next(event for event in events if event['state'] and event['state']['status'] == 'ok')
     assert ready['classification_channels'] == channel_count
     assert ready['inference_mode'] == 'spectral_heuristic'

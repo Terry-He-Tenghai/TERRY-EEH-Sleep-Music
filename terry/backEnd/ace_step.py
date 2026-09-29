@@ -1,6 +1,7 @@
 """Small, bounded proxy for the ACE-Step generation API over a local SSH tunnel."""
 
 import json
+import math
 import os
 import re
 import threading
@@ -42,11 +43,19 @@ class AutomaticMusic:
         self.last_submit = 0.0
         self.state = {"status": "stopped", "audio_url": None, "music_state": None, "error": None}
         self.worker = None
+        self.live_valid_until = None
+
+    def _expire_live(self):
+        if self.live_valid_until is not None and time.monotonic() > self.live_valid_until:
+            self.state = {**self.state, 'status': 'paused', 'audio_url': None}
+            self.wanted = None
+            self.live_valid_until = None
 
     def start(self, session, style):
         with self.lock:
             self.session = session
             self.style = style
+            self.live_valid_until = None
             self.wanted = None
             self.current = None
             self.cached = {}
@@ -57,29 +66,45 @@ class AutomaticMusic:
         with self.lock:
             self.session += 1
             self.style = None
+            self.live_valid_until = None
             self.wanted = None
             self.cached = {}
             self.state = {"status": "stopped", "audio_url": None, "music_state": None, "error": None}
 
     def status(self):
         with self.lock:
+            self._expire_live()
             return {"session_id": self.session, **self.state}
 
     def consider(self, event):
         with self.lock:
             if not self.style or event.get("session_id") != self.session:
                 return
-            valid = (event.get("status") == "ready" and event.get("playback_mode") == "adaptive"
-                     and (event.get("state") or {}).get("status") == "ok"
-                     and (event.get("classification_confirmed") is True or
-                          (event.get("state") or {}).get("baseline_ready") is True or
-                          (event.get("source") == "LIVE" and event.get("probability_origin") == "eeg_spectral_heuristic_unvalidated"
-                           and (event.get("channel_repair") or {}).get("valid_channels")))
-                     and event.get("source") in ("LIVE", "DEMO"))
+            model_permission = (event.get('classification_confirmed') is True
+                                or (event.get('state') or {}).get('baseline_ready') is True)
+            if event.get('source') == 'LIVE':
+                probabilities = event.get('probabilities') or {}
+                emitted = event.get('emitted_at_s')
+                numeric = lambda value: isinstance(value, (float, int)) and math.isfinite(value)
+                model_permission = (
+                    event.get('inference_mode') == 'waveform_cnn'
+                    and event.get('probability_origin') == 'trained_waveform_cnn_experimental'
+                    and event.get('classification_confirmed') is True
+                    and event.get('signal_quality') == 1.0
+                    and numeric(emitted) and 0 <= time.time() - emitted <= 15
+                    and all(numeric(probabilities.get(key)) and 0 <= probabilities[key] <= 1 for key in ('W', 'N1', 'N2'))
+                    and abs(sum(probabilities.get(key, 0) for key in ('W', 'N1', 'N2')) - 1) <= .001)
+            valid = (event.get('status') == 'ready' and event.get('playback_mode') == 'adaptive'
+                     and (event.get('state') or {}).get('status') == 'ok'
+                     and model_permission and event.get('source') in ('LIVE', 'DEMO')
+                     and event.get('target_music_state') in ('M1', 'M2', 'M3'))
             if not valid:
+                self.live_valid_until = None
                 self.state = {**self.state, "status": "paused", "audio_url": None}
                 self.wanted = None
                 return
+            self.live_valid_until = (time.monotonic() + max(0, 15 - (time.time() - emitted))
+                                     if event.get('source') == 'LIVE' else None)
             target = event.get("target_music_state")
             if target not in ("M1", "M2", "M3"):
                 return
@@ -102,6 +127,7 @@ class AutomaticMusic:
     def _run(self, session):
         while True:
             with self.lock:
+                self._expire_live()
                 if session != self.session or not self.style or not self.wanted:
                     return
                 target = self.wanted
@@ -121,11 +147,13 @@ class AutomaticMusic:
                 deadline = time.monotonic() + 300
                 while time.monotonic() < deadline:
                     with self.lock:
+                        self._expire_live()
                         if session != self.session or self.state["status"] == "paused":
                             return
                     outcome = generation(task_id)
                     if outcome["status"] == "completed":
                         with self.lock:
+                            self._expire_live()
                             if session == self.session:
                                 self.cached[target] = outcome["audio_url"]
                             if session == self.session and self.wanted == target and self.state["status"] != "paused":

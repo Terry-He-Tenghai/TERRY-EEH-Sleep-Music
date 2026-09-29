@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 from scipy.signal import butter, iirnotch, tf2sos
 
@@ -9,6 +11,31 @@ def assess(samples):
     sos = np.concatenate([tf2sos(b, a), butter(4, [5, 50], fs=250, btype='bandpass', output='sos')])
     return repair_channels(samples, tuple(str(i) for i in range(16)), 500,
                            filter_sos=sos, sample_rate_hz=250)
+
+
+def test_demo_repair_uses_actual_signal_pipeline_filter_contract():
+    from anphy_sleep.config import load_config
+    from anphy_sleep.contracts import EegChunk
+    from anphy_sleep.streaming import SignalPipeline
+
+    config, _ = load_config(Path(__file__).parents[1] / 'config.hardware.yaml')
+    pipeline = SignalPipeline(config)
+    np.testing.assert_array_equal(
+        pipeline.filter_sos, np.concatenate([pipeline.notch_sos, pipeline.sos]))
+    state_before = pipeline.filter_state.copy()
+    t = np.arange(1500) / 250
+    raw = np.vstack([20 * np.sin(2 * np.pi * (6 + i % 6) * t + i / 3) for i in range(16)])
+    repaired, details = repair_channels(raw, pipeline.target_channels, 500,
+                                       filter_sos=pipeline.filter_sos, sample_rate_hz=250)
+    assert details['usable']
+    # Quality assessment uses the same coefficients but must not advance the
+    # causal filter state subsequently used by the real streaming pipeline.
+    np.testing.assert_array_equal(pipeline.filter_state, state_before)
+    windows = pipeline.push(EegChunk(timestamp_s=0, sample_rate_hz=250,
+                                    channel_names=pipeline.target_channels,
+                                    samples=repaired, unit='uV', session_id='demo-test'))
+    assert windows and windows[0][0] == 6
+    assert np.isfinite(windows[0][1]).all()
 
 
 def test_mains_noise_is_assessed_after_filtering_without_mutating_model_input():

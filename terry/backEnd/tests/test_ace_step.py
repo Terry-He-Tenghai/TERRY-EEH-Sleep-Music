@@ -113,7 +113,10 @@ def test_automatic_pauses_on_invalid_model_event_and_uses_cached_track():
     automatic.start(51, "piano")
     automatic.cached["M2"] = "/api/ace/generations/cached_audio/audio"
     valid = {"session_id": 51, "status": "ready", "playback_mode": "adaptive",
-             "source": "LIVE", "state": {"status": "ok", "baseline_ready": True},
+             "source": "LIVE", "state": {"status": "ok", "baseline_ready": False},
+             "classification_confirmed": True, "signal_quality": 1.0,
+             "inference_mode": "waveform_cnn", "probability_origin": "trained_waveform_cnn_experimental",
+             "probabilities": {"W": .1, "N1": .8, "N2": .1}, "emitted_at_s": ace.time.time(),
              "target_music_state": "M2"}
     automatic.consider(valid)
     assert automatic.status()["status"] == "ready"

@@ -183,7 +183,8 @@ def test_suno_request_and_callback_cache(tmp_path: Path) -> None:
 
 def test_runtime_plays_only_approved_cached_track(tmp_path: Path) -> None:
     repository = TrackRepository(tmp_path / "cache.json")
-    repository.register_task(MusicMode.ANTI_HYPERAROUSAL, "task-1")
+    # AdaptiveMusicRuntime maps the awake warm_pad role to ALPHA_STABILIZATION.
+    repository.register_task(MusicMode.ALPHA_STABILIZATION, "task-1")
     repository.ingest_callback(
         {
             "taskId": "task-1",
@@ -191,7 +192,7 @@ def test_runtime_plays_only_approved_cached_track(tmp_path: Path) -> None:
             "audioUrl": "https://audio.test/approved.mp3",
         }
     )
-    repository.approve(MusicMode.ANTI_HYPERAROUSAL, 0)
+    repository.approve(MusicMode.ALPHA_STABILIZATION, 0)
     player = NullAudioPlayer()
     runtime = AdaptiveMusicRuntime(
         repository,
@@ -199,9 +200,10 @@ def test_runtime_plays_only_approved_cached_track(tmp_path: Path) -> None:
         approved_only=True,
     )
     runtime.start(pregenerate=False)
-    runtime.update(
+    command = runtime.update(
         _state(0, {"W": 0.9, "N1": 0.08, "N2": 0.02}, beta_z=1)
     )
+    assert command.parameters['adaptive_suno_role'] == 'warm_pad'
     runtime.playback_worker.commands.join()
     runtime.shutdown()
     assert player.events[0].action == "play"

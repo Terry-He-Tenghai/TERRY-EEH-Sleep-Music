@@ -112,7 +112,7 @@ def test_live_cap_montage_does_not_masquerade_as_existing_model(monkeypatch):
     assert events[-1]['probabilities'] is None
 
 
-def test_live_cap_collects_spectral_window_without_model_baseline(monkeypatch):
+def test_live_cap_collects_waveform_window_without_model_baseline(monkeypatch):
     from adaptive_web import AdaptiveWebService, _Session
 
     monkeypatch.setenv('TERRY_EEG_EXPERIMENTAL_16CH_MAPPING', '1')
@@ -124,16 +124,16 @@ def test_live_cap_collects_spectral_window_without_model_baseline(monkeypatch):
 
     def publish(event):
         events.append(event)
-        if event.get('reason') == 'collecting_eeg_window':
+        if event.get('reason') == 'collecting_model_window':
             ctx.cancelled.set()
 
     adaptive._publish = publish
     adaptive._process(ctx)
     assert events[-1]['status'] == 'waiting'
-    assert events[-1]['reason'] == 'collecting_eeg_window'
+    assert events[-1]['reason'] == 'collecting_model_window'
 
 
-def test_spectral_path_does_not_require_experimental_model_mapping(monkeypatch):
+def test_waveform_path_does_not_use_legacy_interpolated_montage(monkeypatch):
     from adaptive_web import AdaptiveWebService, _Session
 
     monkeypatch.setenv('TERRY_EEG_EXPERIMENTAL_16CH_MAPPING', '1')
@@ -148,8 +148,8 @@ def test_spectral_path_does_not_require_experimental_model_mapping(monkeypatch):
     adaptive._publish = capture
     adaptive._process(ctx)
     assert events[-1]['status'] == 'waiting'
-    assert events[-1]['inference_mode'] == 'spectral_heuristic'
-    assert events[-1]['probability_origin'] == 'eeg_spectral_heuristic_unvalidated'
+    assert events[-1]['inference_mode'] == 'waveform_cnn'
+    assert events[-1]['probability_origin'] == 'trained_waveform_cnn_experimental'
 
 
 def test_live_sixteen_channel_model_mismatch_cannot_start_ace(monkeypatch):

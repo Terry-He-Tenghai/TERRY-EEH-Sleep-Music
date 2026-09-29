@@ -51,6 +51,7 @@ export function validateAdaptiveEvent(event) {
   const conservative = event.playback_mode === 'conservative'
   if (!conservative && (!probabilities || !['W', 'N1', 'N2'].every(key => Number.isFinite(probabilities[key]) && probabilities[key] >= 0 && probabilities[key] <= 1) || Math.abs(['W', 'N1', 'N2'].reduce((sum, key) => sum + probabilities[key], 0) - 1) > .01)) throw new Error('睡眠状态概率无效')
   const repair = event.channel_repair
+  if (event.inference_mode === 'waveform_cnn' && (event.source !== 'LIVE' || event.probability_origin !== 'trained_waveform_cnn_experimental' || event.classification_confirmed !== true || event.state?.status !== 'ok' || event.signal_quality !== 1)) throw new Error('波形模型分类未确认或质量不合格')
   const meanImputed = repair?.method === 'available_channel_mean' && repair.experimental === true && repair.usable === true && Array.isArray(repair.valid_channels) && repair.valid_channels.length >= 8 && Number.isFinite(repair.valid_fraction) && repair.valid_fraction >= .5
   const spectral = event.source === 'LIVE' && event.inference_mode === 'spectral_heuristic' && event.probability_origin === 'eeg_spectral_heuristic_unvalidated' && repair?.used_channels?.length >= 1 && Number.isFinite(repair.valid_fraction) && repair.valid_fraction > 0
   if (conservative) {

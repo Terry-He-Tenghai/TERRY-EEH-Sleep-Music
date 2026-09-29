@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 
 from classification_gate import ClassificationGate
@@ -9,15 +10,19 @@ def state(t, **kwargs):
                                       aasm_state_probabilities={'W': .1, 'N1': .8, 'N2': .1}), **kwargs))
 
 
-def test_full_window_and_two_confirmations_without_baseline():
+def test_full_window_and_three_confirmations_without_baseline():
+    # This gate belongs to the existing DEMO model path. LIVE waveform models
+    # use their own configurable two-confirmation gate in adaptive_web.
     gate = ClassificationGate()
     assert not gate.update(state(27))
     assert not gate.update(state(30))
     assert not gate.update(state(30))
-    assert gate.update(state(33))
-    assert not gate.update(state(36, signal_quality=0))
-    assert not gate.update(state(39))
-    assert gate.update(state(42))
+    assert not gate.update(state(33))
+    assert gate.update(state(36))
+    assert not gate.update(state(39, signal_quality=0))
+    assert not gate.update(state(42))
+    assert not gate.update(state(45))
+    assert gate.update(state(48))
 
 
 def test_uncertain_and_changing_classification_cannot_start():
@@ -33,6 +38,9 @@ def test_confirmed_classification_plays_cached_style_before_baseline(monkeypatch
     music.start(12, 'ambient')
     event = dict(session_id=12, status='ready', playback_mode='adaptive', source='LIVE',
                  state={'status': 'ok', 'baseline_ready': False}, classification_confirmed=True,
+                 inference_mode='waveform_cnn', probability_origin='trained_waveform_cnn_experimental',
+                 emitted_at_s=time.time(), signal_quality=1.0,
+                 probabilities={'W': .1, 'N1': .8, 'N2': .1},
                  target_music_state='M2', selected_track={'url': '/api/music/style-ambient-0/audio'},
                  track_status='available')
     music.consider(event)

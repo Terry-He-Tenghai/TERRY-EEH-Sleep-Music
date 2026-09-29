@@ -4,6 +4,7 @@ import StemMusicPanel from './components/StemMusicPanel.vue'
 import MusicWorkbench from './components/MusicWorkbench.vue'
 import AceMusicPanel from './components/AceMusicPanel.vue'
 import AutomaticAcePanel from './components/AutomaticAcePanel.vue'
+import { liveClassification as classifyLive, waveformStatus, waveformCollection } from './audio/liveClassification.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const CHANNELS = ['C3', 'C4', 'Cz', 'FC3', 'FC4', 'CP3', 'CP4', 'FCz', 'CPz', 'Fz', 'P3', 'Pz', 'P4', 'O1', 'Oz', 'O2']
@@ -79,26 +80,9 @@ const wsBase = import.meta.env.VITE_WS_BASE || `${location.protocol === 'https:'
 const statusText = computed(() => error.value ? '错误' : running.value && mode.value === 'brainflow' ? (connected.value ? '设备采集中' : '正在连接设备') : running.value ? '演示采集中' : '未开始')
 const enabledCount = computed(() => channelEnabled.value.filter(Boolean).length)
 const classificationClock = ref(Date.now())
-const pretrainedReasons = {
-  channel_map_unconfirmed: '尚未确认设备通道接线',
-  reference_unconfirmed_or_unsupported: '参考电极未确认或不符合支持的导联',
-  matching_clean_central_channel_missing: '缺少质量合格且参考匹配的中央电极',
-  matching_channel_missing_samples: '模型所需通道有缺失样本',
-  warming_up_300_seconds: '正在收集连续5分钟模型数据',
-  predicting: '模型正在后台推理，频谱反馈继续',
-  model_load_or_prediction_failed: '模型加载或推理失败，已保留频谱反馈',
-  configuration_error: '模型配置错误，已保留频谱反馈', disabled: '预训练模型已关闭',
-  rolling_prediction_unvalidated: '滚动窗口预测，未经本设备验证',
-}
-const pretrainedReady = computed(() => running.value && adaptiveEvent.value?.pretrained?.status === 'ready' && adaptiveEvent.value?.state?.status === 'ok' && classificationClock.value - adaptiveEvent.value.emitted_at_s * 1000 <= 15000)
 let classificationTimer = null
-const liveClassification = computed(() => {
-  const event = adaptiveEvent.value
-  if (event?.source !== 'LIVE' || event?.state?.status !== 'ok' || event?.probability_origin !== 'eeg_spectral_heuristic_unvalidated' || !Number.isFinite(event.emitted_at_s) || classificationClock.value - event.emitted_at_s * 1000 > 15000) return null
-  const probabilities = event.probabilities
-  if (!probabilities || !['W', 'N1', 'N2'].every(key => Number.isFinite(probabilities[key]))) return null
-  return Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0]
-})
+const liveClassification = computed(() => classifyLive(adaptiveEvent.value, running.value, classificationClock.value))
+const liveModelStatus = computed(() => waveformStatus(adaptiveEvent.value, classificationClock.value))
 
 function appendSamples(packet) {
   if (!channelsMatch(packet.channels) || !Array.isArray(packet.samples_uv) || packet.samples_uv.length !== displayChannels.value.length) {
@@ -204,7 +188,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
         <div class="music-setup__field">
           <label for="music-source">音频来源</label>
           <select id="music-source" v-model="musicSource" aria-describedby="music-source-help"><option value="ace">AI · 脑电分类生成</option><option value="upload">上传我的音频</option><option value="stems">BabySlakh 原曲分轨 · 脑电混音</option></select>
-          <p id="music-source-help" class="music-setup__help">{{ musicSource === 'ace' ? (mode === 'brainflow' ? '每6秒根据有效脑电频谱估计触发生成，无需个体基线。' : '有效模型分类后，按状态自动生成并播放。') : musicSource === 'stems' ? '20首原曲分轨混音，不叠加 MIDI。' : '使用上传音频作为固定背景。' }}</p>
+          <p id="music-source-help" class="music-setup__help">{{ musicSource === 'ace' ? (mode === 'brainflow' ? '先收集40秒原始波形，每6秒推理；分类稳定确认后触发生成，无需个体基线。' : '有效模型分类后，按状态自动生成并播放。') : musicSource === 'stems' ? '20首原曲分轨混音，不叠加 MIDI。' : '使用上传音频作为固定背景。' }}</p>
         </div>
         <div v-if="musicSource === 'ace'" class="music-setup__field"><label for="ace-style">预设音乐风格</label><select id="ace-style" v-model="aceStyle"><option value="ambient">氛围</option><option value="piano">钢琴</option><option value="nature">自然</option><option value="strings">弦乐</option><option value="electronic">电子</option></select></div>
         <div v-if="musicSource === 'stems'" class="music-setup__field">
@@ -223,7 +207,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
         <template v-else><strong>已选择：{{ uploadedTrack.displayName }}</strong><span>本次采集保持此背景，MIDI 声部自动变化。</span></template>
       </div>
       <footer class="music-setup__footer">
-        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类；实时模式支持未经验证的频谱估计，预设演示不触发生成。远端处理期间保持等待，断流后暂停播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
+        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类；实时模式使用本地训练的波形CNN，仅供研究、未经本设备验证，预设演示不触发生成。远端处理期间保持等待，断流后暂停播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
       </footer>
       <p v-if="musicChoiceError" class="error-message" role="alert">{{ musicChoiceError }}</p>
     </section>
@@ -251,21 +235,12 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
     </section>
     <p class="notice compact-notice">开始采集将启用声音，请先调低设备音量。</p>
     <p v-if="sampleRate !== 250" class="error-message" role="status">自动推理与预设演示需要 250 Hz；请停止采集后切换采样率。</p>
-    <p v-if="mode === 'brainflow'" class="notice" role="status">真实设备始终采集并显示全部 16 路；分类选择 8 或 16 路实测电极，质量不足时使用其他有效实测电极。分类采用未经临床验证的频谱启发式估计，不代表训练模型或睡眠研究结论。</p>
+    <p v-if="mode === 'brainflow'" class="notice" role="status">真实设备始终采集并显示全部 16 路；选择 cap8 或 cap16 分类模型，全部 16 路均须通过严格质量检查，不替换或插值电极。训练权重仅供研究，未经本设备验证。</p>
     <section v-if="mode === 'brainflow' && running" class="panel demo-setup" aria-label="实时分类反馈">
-      <p role="status">{{ adaptiveEvent?.classification_channels || classificationChannels }} 通道分类 · {{ liveClassification ? `${liveClassification[0]} ${(liveClassification[1] * 100).toFixed(1)}%` : '等待有效脑电窗口' }} · 频谱估计，未经验证</p>
+      <p role="status">{{ adaptiveEvent?.waveform_model?.model || `cap${classificationChannels}` }} · {{ adaptiveEvent?.classification_channels || classificationChannels }} 通道分类 · {{ liveClassification ? `${liveClassification[0]} 模型分数 ${(liveClassification[1] * 100).toFixed(1)}%` : '等待有效脑电窗口' }}</p>
+      <p role="status">{{ liveModelStatus }} · 窗口收集 {{ waveformCollection(adaptiveEvent) }}</p>
       <p v-if="liveClassification">W（清醒）{{ (adaptiveEvent.probabilities.W * 100).toFixed(1) }}% · N1（睡眠阶段1）{{ (adaptiveEvent.probabilities.N1 * 100).toFixed(1) }}% · N2（睡眠阶段2）{{ (adaptiveEvent.probabilities.N2 * 100).toFixed(1) }}%</p>
-      <div v-if="adaptiveEvent?.pretrained" aria-label="预训练模型反馈">
-        <p>预训练模型：{{ adaptiveEvent.pretrained.model }} · {{ pretrainedReady ? `当前预测 ${adaptiveEvent.pretrained.stage}` : '使用频谱兜底' }}</p>
-        <p>{{ pretrainedReasons[adaptiveEvent.pretrained.reason] || adaptiveEvent.pretrained.reason }} · 参考 {{ adaptiveEvent.pretrained.reference }}<span v-if="adaptiveEvent.pretrained.channel"> · 电极 {{ adaptiveEvent.pretrained.channel }}</span></p>
-        <p v-if="pretrainedReady"><span v-for="(probability, stage) in adaptiveEvent.pretrained.probabilities" :key="stage">{{ stage }} {{ (probability * 100).toFixed(1) }}%　</span></p>
-        <p>ACE-Step 控制来源：{{ pretrainedReady && adaptiveEvent.music_control_origin === 'yasa_rolling_unvalidated' ? 'YASA 预测（实验性）' : '频谱估计（兜底）' }}。模型五阶段概率单独保留；N3/REM 不冒充 N2。</p>
-      </div>
-      <p v-if="adaptiveEvent?.channel_repair?.quality_warning" role="status">低质量信号降级估计：{{ adaptiveEvent.channel_repair.low_quality_channels.join('、') }}。有分类数值不代表睡眠判断可信，当前仅用于音乐联调。</p>
-      <p v-if="adaptiveEvent?.reason === 'waiting_for_live_data'" role="status">等待设备恢复数据；恢复后自动重新收集分类窗口。</p>
-      <p v-if="adaptiveEvent?.reason === 'recollecting_after_packet_gap'" role="status">检测到丢包或重复包，已丢弃受影响窗口，正在自动重新收集。</p>
-      <p v-if="adaptiveEvent?.reason === 'no_valid_electrodes'" role="status">所有通道均缺少可计算的变化信号；恢复任一路后会自动返回估计。</p>
-      <p v-if="adaptiveEvent?.channel_repair">实际使用：{{ adaptiveEvent.channel_repair.used_channels?.join('、') || '暂无有效电极' }}<span v-if="adaptiveEvent.channel_repair.selection_fallback">（所选电极无效，已改用其他有效电极）</span></p>
+      <p>原始波形卷积神经网络（CNN）：每 6 秒处理最近 40 秒，预测代表最近 30 秒。模型分数不是校准置信度；仅供研究，未经本设备验证，不用于临床睡眠判断。无需个体基线。</p>
     </section>
     <p v-if="error" class="error-message" role="alert">{{ error }}</p>
     <p v-if="waveformError" class="error-message" role="alert">{{ waveformError }}</p>
@@ -284,7 +259,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
       <section class="visual-panel"><div class="panel-heading"><div><h2>{{ displayChannels.length }} 通道波形</h2></div><label class="select-all"><input type="checkbox" :checked="enabledCount === displayChannels.length" @change="toggleAll" /> 全选通道</label></div><div class="canvas-wrap"><canvas ref="canvas" /></div><div class="channel-list"><label v-for="(channel, index) in displayChannels" :key="channel" class="channel-toggle" :style="{ '--channel-color': COLORS[index] }"><input v-model="channelEnabled[index]" type="checkbox" /><span>{{ index + 1 }} {{ channel }}</span></label></div></section>
       <p class="notice">显示波形经过 5–50 Hz 级联及 50 Hz 陷波；显示幅度有限制，不代表信号质量合格。</p>
     </details>
-    <details class="workspace-details panel"><summary>采集与播放说明</summary><p>开始采集同时启用音乐计划与本地播放，停止采集同时停止自动音乐。常规自适应模式需满足模型、基线、通道和质量条件；仍有有效电极但条件不足时，可提供明确标记的保守音乐。演示信号不代表真实睡眠状态。</p><p>原始波形支持250/500/1000 Hz，当前模型仅接收250 Hz。真实模式请独占设备连接。研究原型，未验证助眠效果。</p></details>
+    <details class="workspace-details panel"><summary>采集与播放说明</summary><p>开始采集同时启用音乐计划与本地播放，停止采集同时停止自动音乐。演示模型模式保留原有基线与质量要求；真实设备模式使用40秒波形窗口，无需个体基线，全部16路质量合格且分类稳定确认后才允许自动音乐。等待、无效或过期的实时分类会暂停音乐。演示信号不代表真实睡眠状态。</p><p>原始波形支持250/500/1000 Hz，当前模型仅接收250 Hz。真实模式请独占设备连接。研究原型，未验证助眠效果。</p></details>
     <details class="workspace-details panel manual-tools"><summary>高级工具 · MIDI实验台</summary><MusicWorkbench /></details>
   </main>
   </div>

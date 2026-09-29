@@ -92,9 +92,9 @@ def test_invalid_settings(source, tmp_path, kwargs):
     assert not (tmp_path / "out").exists()
 
 
-def test_symlink_rejected(source, tmp_path):
+def test_symlink_rejected(source, tmp_path, symlink_or_skip):
     link = tmp_path / "linked.wav"
-    link.symlink_to(source)
+    symlink_or_skip(link, source)
     with pytest.raises(ValueError, match="regular"):
         prepare(link, tmp_path / "out", provenance="Test", duration_s=1)
     directory = prepared(source, tmp_path)

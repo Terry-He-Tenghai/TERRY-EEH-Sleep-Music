@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import { isScriptedDemo } from '../audio/demoOrigin.js'
 import { AdaptiveEngine } from '../audio/adaptiveEngine.js'
+import { waveformHoldReasons } from '../audio/liveClassification.js'
 
 const props = defineProps({ event: { type: Object, default: null }, disabled: { type: Boolean, default: false } })
 const scripted = computed(() => props.event?.demo_scripted === true)
@@ -17,7 +18,7 @@ const classifierState = computed(() => props.event?.state || {})
 const futureN2 = computed(() => Number.isFinite(classifierState.value.n2_within_5m_probability) ? classifierState.value.n2_within_5m_probability : null)
 const baselineReady = computed(() => classifierState.value.baseline_ready === true)
 const inferenceBlocked = computed(() => ['blocked', 'error', 'frozen'].includes(props.event?.status))
-const baselineLabel = computed(() => scripted.value ? '动态演示不使用基线' : props.event?.inference_mode === 'spectral_heuristic' ? '频谱估计不使用基线' : inferenceBlocked.value ? '已阻塞' : props.event?.status === 'stopped' ? '已停止' : !props.event?.state ? '尚未开始' : baselineReady.value ? '已就绪' : '采集中')
+const baselineLabel = computed(() => props.event?.inference_mode === 'waveform_cnn' ? '波形模型不使用个体基线' : scripted.value ? '动态演示不使用基线' : props.event?.inference_mode === 'spectral_heuristic' ? '频谱估计不使用基线' : inferenceBlocked.value ? '已阻塞' : props.event?.status === 'stopped' ? '已停止' : !props.event?.state ? '尚未开始' : baselineReady.value ? '已就绪' : '采集中')
 const inferenceStatus = computed(() => scripted.value ? '预设演示，未运行分类器' : inferenceBlocked.value ? '推理已阻塞' : ({ ok: '分类结果已返回', warming_up: '特征预热中', signal_invalid: '信号无效' }[classifierState.value.status] || backendReason.value))
 const featureDefinitions = [
   ['frontal_beta_z', '额区 β 基线偏差'], ['posterior_alpha_z', '后部 α 基线偏差'],
@@ -26,6 +27,7 @@ const featureDefinitions = [
 ]
 const spectralFeatures = [['delta_ratio', 'δ 相对功率'], ['theta_ratio', 'θ 相对功率'], ['alpha_ratio', 'α 相对功率'], ['sigma_ratio', 'σ 相对功率'], ['beta_ratio', 'β 相对功率']]
 const interpretableFeatures = computed(() => {
+  if (props.event?.inference_mode === 'waveform_cnn') return []
   const values = props.event?.interpretable_features || {}
   return (props.event?.inference_mode === 'spectral_heuristic' ? spectralFeatures : featureDefinitions).map(([key, label]) => ({ key, label, value: Number.isFinite(values[key]) ? values[key] : null }))
 })
@@ -87,6 +89,7 @@ const reasonLabels = {
   hardware_package_discontinuity_restart_required: '设备样本计数不连续，可能丢包、重复或乱序；请检查Wi-Fi连接后重新采集',
   invalid_hardware_package_counters_restart_required: '设备样本计数缺失或格式无效，无法确认数据连续性',
   acquisition_stopped: '采集已停止', acquisition_stale_restart_required: '脑电断流，需重新开始采集',
+  ...waveformHoldReasons,
 }
 const qcReasonLabels = { valid: '通过', nonfinite: '缺失或非有限值', flatline: '平直或长时间不变', excessive_amplitude: '去趋势后幅度仍过大', repeated_artifacts: '多次大幅异常' }
 const qcNumber = value => Number.isFinite(value) ? value.toFixed(1) : '—'

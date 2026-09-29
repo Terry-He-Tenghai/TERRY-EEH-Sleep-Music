@@ -112,18 +112,18 @@ def test_unsafe_paths_denied(library, filename):
     assert request("/api/music/calm-01/audio")[0] == 404
 
 
-def test_symlink_escape_denied(library):
+def test_symlink_escape_denied(library, symlink_or_skip):
     outside = library.parent / "secret.mp3"
     outside.write_bytes(b"secret")
-    (library / "calm.mp3").symlink_to(outside)
+    symlink_or_skip(library / "calm.mp3", outside)
     manifest(library, [entry()])
     assert request("/api/music/calm-01/audio")[0] == 404
 
 
-def test_symlink_manifest_denied(library):
+def test_symlink_manifest_denied(library, symlink_or_skip):
     outside = library.parent / "secret.json"
     outside.write_text(json.dumps({"version": 1, "tracks": [entry()]}))
-    (library / "manifest.json").symlink_to(outside)
+    symlink_or_skip(library / "manifest.json", outside)
     assert json.loads(request()[2])["tracks"] == []
 
 

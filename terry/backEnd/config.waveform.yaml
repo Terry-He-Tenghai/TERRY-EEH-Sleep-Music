@@ -1,0 +1,7 @@
+# Experimental integration of the locally trained W/N1/N2 models.
+# This is NOT a declaration that the headset/reference or clinical use is validated.
+enabled: true
+model_root: ../results/waveform_cap_v1
+# Consecutive overlapping 30s predictions, 6s apart: debounce, not independent evidence.
+confirmations_required: 2
+minimum_stage_probability: 0.55

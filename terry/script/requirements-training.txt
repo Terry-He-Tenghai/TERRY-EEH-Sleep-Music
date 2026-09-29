@@ -1,0 +1,5 @@
+# Install CUDA PyTorch separately; see TRAINING.md.
+numpy==2.2.6
+scipy==1.15.3
+mne==1.10.2
+pytest==8.4.2
