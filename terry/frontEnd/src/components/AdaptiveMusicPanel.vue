@@ -1,4 +1,5 @@
 <script setup>
+import WaveformQuality from './WaveformQuality.vue'
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import { isScriptedDemo } from '../audio/demoOrigin.js'
 import { AdaptiveEngine } from '../audio/adaptiveEngine.js'
@@ -71,7 +72,7 @@ function probabilityPoints(key) {
 }
 const reasonLabels = {
   collecting_eeg_window: '正在收集 6 秒脑电窗口', eeg_spectral_heuristic_unvalidated: '频谱分类估计已返回，未经验证',
-  live_inference_requires_8_or_16_channels: '实时分类需要 8 或 16 路脑电信号',
+  live_inference_requires_8_or_16_channels: '所选实时分类模型与脑电输入通道不匹配',
   initializing_inference: '正在加载模型', collecting_baseline_and_state_windows: '等待基线与状态窗口',
   collecting_clean_baseline: '正在收集清洁基线，当前配置300秒；信号质量会影响准备时间',
   warming_up_inference_features: '推理特征预热中', collecting_state_probability_windows: '正在累计分类窗口',
@@ -162,6 +163,7 @@ defineExpose({ arm, stop })
     <div class="probabilities" aria-label="睡眠状态概率">
       <div v-for="item in probabilities" :key="item.key"><label :for="`adaptive-prob-${item.key}`">{{ item.key }} <span>{{ item.value === null ? '不可用' : `${(item.value * 100).toFixed(1)}%` }}</span></label><meter :id="`adaptive-prob-${item.key}`" min="0" max="1" :value="item.value ?? 0" :aria-label="`${item.key} 概率`" /></div>
       <p>信号质量 <strong>{{ quality }}</strong></p>
+      <WaveformQuality v-if="event?.source === 'LIVE'" :event="event" />
     </div>
     <p class="legend">W：清醒 · N1：浅睡眠阶段 1 · N2：浅睡眠阶段 2。概率{{ scripted ? '为预设演示权重，非模型预测' : '为后端估计，非临床诊断' }}。</p>
     <details v-if="history.length" class="classifier-details" aria-label="最近分类概率趋势">

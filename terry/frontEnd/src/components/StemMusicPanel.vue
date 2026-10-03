@@ -1,4 +1,5 @@
 <script setup>
+import WaveformQuality from './WaveformQuality.vue'
 import { computed, shallowRef, watch, onBeforeUnmount } from 'vue'
 import { StemEngine } from '../audio/stemEngine.js'
 const props = defineProps({ event: Object, track: Object })
@@ -35,6 +36,7 @@ defineExpose({ arm, stop })
     <div class="stem-status"><strong>{{ labels[playback.status] }}</strong><span>{{ track?.id || '未选择曲目' }}</span><span>{{ Math.floor((playback.elapsed || 0)/60) }}:{{ String(Math.floor((playback.elapsed || 0)%60)).padStart(2,'0') }}</span><b>{{ stage }}</b></div>
     <p v-if="playback.status !== 'playing'" class="status-message" role="status">{{ playback.reason || '开始采集后启用音乐。' }}</p>
     <p v-else-if="playback.applied?.mode === 'conservative'" class="status-message">基线准备中 · 固定低增益混音</p>
+    <WaveformQuality v-if="event?.source === 'LIVE'" :event="event" />
     <div class="audio-visual" aria-label="浏览器混音输出分析">
       <div class="visual-heading"><span>实时输出波形</span><strong>{{ db }}</strong></div>
       <svg viewBox="0 0 720 144" role="img" aria-label="浏览器输出波形，横轴最近约64毫秒，纵轴数字幅度，显示放大8倍">

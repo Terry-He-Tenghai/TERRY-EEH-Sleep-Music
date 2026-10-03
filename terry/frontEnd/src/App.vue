@@ -1,4 +1,6 @@
 <script setup>
+import WaveformQuality from './components/WaveformQuality.vue'
+import { CAP_CHANNELS, MODEL_OPTIONS, plotChannelIndices, qualityChannels } from './audio/modelChannels.js'
 import AdaptiveMusicPanel from './components/AdaptiveMusicPanel.vue'
 import StemMusicPanel from './components/StemMusicPanel.vue'
 import MusicWorkbench from './components/MusicWorkbench.vue'
@@ -8,7 +10,6 @@ import { liveClassification as classifyLive, waveformStatus, waveformCollection 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const CHANNELS = ['C3', 'C4', 'Cz', 'FC3', 'FC4', 'CP3', 'CP4', 'FCz', 'CPz', 'Fz', 'P3', 'Pz', 'P4', 'O1', 'Oz', 'O2']
-const CAP_CHANNELS = ['Fp1', 'Fp2', 'C3', 'C4', 'P7', 'P8', 'O1', 'O2', 'F7', 'F8', 'F3', 'F4', 'T7', 'T8', 'P3', 'P4']
 const displayChannels = computed(() => mode.value === 'brainflow' ? CAP_CHANNELS : CHANNELS)
 const COLORS = ['#27708b', '#a35b25', '#867017', '#7954a3', '#387448', '#376b9f', '#a94264', '#586a7a', '#9d631c', '#247866', '#a94747', '#8159a0', '#507c32', '#a64c78', '#7055a0', '#267b84']
 const sampleRate = ref(250), activeSampleRate = ref(250)
@@ -16,6 +17,9 @@ const verticalScale = ref(200)
 const canvas = ref(null), mode = ref('demo'), ipAddress = ref('192.168.4.1'), gain = ref(24)
 const demoProfile = ref('model')
 const classificationChannels = ref(16)
+const showAllChannels = ref(false)
+const plotIndices = computed(() => plotChannelIndices(displayChannels.value, classificationChannels.value, showAllChannels.value, mode.value === 'brainflow'))
+const plottedChannels = computed(() => plotIndices.value.map(index => ({ name: displayChannels.value[index], index })))
 const running = ref(false), connected = ref(false), paused = ref(false), displaySeconds = ref(5), error = ref('')
 const waveformError = ref('')
 const samplesEmitted = ref(0), lastTimestamp = ref(0), channelEnabled = ref(CHANNELS.map(() => true))
@@ -78,7 +82,8 @@ watch(mode, () => { signal.value = displayChannels.value.map(() => []); channelE
 const apiBase = import.meta.env.VITE_API_BASE || ''
 const wsBase = import.meta.env.VITE_WS_BASE || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`
 const statusText = computed(() => error.value ? '错误' : running.value && mode.value === 'brainflow' ? (connected.value ? '设备采集中' : '正在连接设备') : running.value ? '演示采集中' : '未开始')
-const enabledCount = computed(() => channelEnabled.value.filter(Boolean).length)
+const enabledCount = computed(() => plotIndices.value.filter(index => channelEnabled.value[index]).length)
+watch([classificationChannels, showAllChannels], draw)
 const classificationClock = ref(Date.now())
 let classificationTimer = null
 const liveClassification = computed(() => classifyLive(adaptiveEvent.value, running.value, classificationClock.value))
@@ -152,7 +157,7 @@ async function stopAcquisition() {
 }
 function togglePause() { paused.value = !paused.value }
 function clearWaveform() { signal.value = displayChannels.value.map(() => []); samplesEmitted.value = 0; lastTimestamp.value = 0; draw() }
-function toggleAll(event) { channelEnabled.value = displayChannels.value.map(() => event.target.checked) }
+function toggleAll(event) { for (const index of plotIndices.value) channelEnabled.value[index] = event.target.checked }
 function setDisplaySeconds() { const maxSamples = Math.round(activeSampleRate.value * displaySeconds.value); signal.value = signal.value.map((channel) => channel.slice(-maxSamples)); draw() }
 function draw() {
   const element = canvas.value; if (!element) return
@@ -161,13 +166,13 @@ function draw() {
   const ratio = window.devicePixelRatio || 1, width = Math.max(280, rect.width), height = Math.max(450, rect.height)
   if (element.width !== width * ratio || element.height !== height * ratio) { element.width = width * ratio; element.height = height * ratio }
   const context = element.getContext('2d'); context.setTransform(ratio, 0, 0, ratio, 0, 0); context.fillStyle = '#ffffff'; context.fillRect(0, 0, width, height)
-  const left = 58, right = 20, top = 22, bottom = 30, plotWidth = width - left - right, plotHeight = height - top - bottom, rowHeight = plotHeight / displayChannels.value.length
+  const left = 58, right = 20, top = 22, bottom = 30, plotWidth = width - left - right, plotHeight = height - top - bottom, rowHeight = plotHeight / Math.max(1, plotIndices.value.length)
   context.font = '11px Inter, system-ui, sans-serif'; context.lineWidth = 1
-  for (let i = 0; i < displayChannels.value.length; i += 1) { const y = top + rowHeight * i + rowHeight / 2; context.strokeStyle = '#e5eae2'; context.beginPath(); context.moveTo(left, y); context.lineTo(width - right, y); context.stroke(); context.fillStyle = channelEnabled.value[i] ? COLORS[i] : '#526277'; context.fillText(displayChannels.value[i], 12, y + 4) }
+  for (const [row, i] of plotIndices.value.entries()) { const y = top + rowHeight * row + rowHeight / 2; context.strokeStyle = '#e5eae2'; context.beginPath(); context.moveTo(left, y); context.lineTo(width - right, y); context.stroke(); context.fillStyle = channelEnabled.value[i] ? COLORS[i] : '#526277'; context.fillText(displayChannels.value[i], 12, y + 4) }
   for (let i = 0; i <= 5; i += 1) { const x = left + (plotWidth * i) / 5; context.strokeStyle = '#edf0eb'; context.beginPath(); context.moveTo(x, top); context.lineTo(x, height - bottom); context.stroke(); context.fillStyle = '#71839a'; context.fillText(`${(-displaySeconds.value + displaySeconds.value * i / 5).toFixed(1)}s`, x - 14, height - 8) }
   const centered = signal.value.map(values => { const baseline = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0; return values.map(value => value - baseline) })
   const amplitude = Number(verticalScale.value)
-  for (let i = 0; i < displayChannels.value.length; i += 1) { if (!channelEnabled.value[i] || !signal.value[i].length) continue; const values = centered[i], yCenter = top + rowHeight * i + rowHeight / 2; context.strokeStyle = COLORS[i]; context.lineWidth = 1.2; context.beginPath(); values.forEach((value, index) => { const x = left + ((Math.max(0, Math.round(activeSampleRate.value * displaySeconds.value) - values.length) + index) / Math.max(1, Math.round(activeSampleRate.value * displaySeconds.value) - 1)) * plotWidth; const y = yCenter - Math.max(-rowHeight * .42, Math.min(rowHeight * .42, (value / amplitude) * rowHeight * .38)); if (index === 0) context.moveTo(x, y); else context.lineTo(x, y) }); context.stroke() }
+  for (const [row, i] of plotIndices.value.entries()) { if (!channelEnabled.value[i] || !signal.value[i].length) continue; const values = centered[i], yCenter = top + rowHeight * row + rowHeight / 2; context.strokeStyle = COLORS[i]; context.lineWidth = 1.2; context.beginPath(); values.forEach((value, index) => { const x = left + ((Math.max(0, Math.round(activeSampleRate.value * displaySeconds.value) - values.length) + index) / Math.max(1, Math.round(activeSampleRate.value * displaySeconds.value) - 1)) * plotWidth; const y = yCenter - Math.max(-rowHeight * .42, Math.min(rowHeight * .42, (value / amplitude) * rowHeight * .38)); if (index === 0) context.moveTo(x, y); else context.lineTo(x, y) }); context.stroke() }
 }
 function resize() { draw() }
 onMounted(() => { loadStemChoices(); refreshAdaptiveStatus(); adaptivePoll = setInterval(refreshAdaptiveStatus, 3000); classificationTimer = setInterval(() => { classificationClock.value = Date.now() }, 1000); connectSocket(); window.addEventListener('resize', resize); draw(); animationFrame.value = requestAnimationFrame(function loop() { draw(); animationFrame.value = requestAnimationFrame(loop) }) })
@@ -230,16 +235,17 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
       <div v-if="mode === 'brainflow'" class="control-group"><label for="device-ip">设备 IP</label><input id="device-ip" v-model="ipAddress" :disabled="running" /></div>
       <div class="control-group"><label for="sample-rate">采样率</label><select id="sample-rate" v-model="sampleRate" :disabled="running"><option v-for="rate in [250,500,1000]" :key="rate" :value="rate">{{ rate }} Hz</option></select></div>
       <div v-if="mode === 'brainflow'" class="control-group"><label for="hardware-gain">硬件增益</label><select id="hardware-gain" v-model="gain" :disabled="running"><option v-for="item in [1,2,4,6,8,12,24]" :key="item" :value="item">×{{ item }}</option></select></div>
-      <div v-if="mode === 'brainflow'" class="control-group"><label for="classification-channels">分类通道</label><select id="classification-channels" v-model="classificationChannels" :disabled="running || startingAcquisition"><option :value="8">8 通道</option><option :value="16">16 通道</option></select></div>
+      <div v-if="mode === 'brainflow'" class="control-group"><label for="classification-channels">分类通道</label><select id="classification-channels" v-model="classificationChannels" :disabled="running || startingAcquisition"><option v-for="option in MODEL_OPTIONS" :key="option.count" :value="option.count">{{ option.count }} 通道 · {{ option.channels.join(' ') }}</option></select></div>
       <div class="actions"><button v-if="!running" class="primary" :disabled="startingAcquisition" @click="startAcquisition">{{ startingAcquisition ? '正在启动…' : '开始采集' }}</button><button v-else class="stop" @click="stopAcquisition">停止采集</button></div>
     </section>
     <p class="notice compact-notice">开始采集将启用声音，请先调低设备音量。</p>
     <p v-if="sampleRate !== 250" class="error-message" role="status">自动推理与预设演示需要 250 Hz；请停止采集后切换采样率。</p>
-    <p v-if="mode === 'brainflow'" class="notice" role="status">真实设备始终采集并显示全部 16 路；选择 cap8 或 cap16 分类模型，全部 16 路均须通过严格质量检查，不替换或插值电极。训练权重仅供研究，未经本设备验证。</p>
+    <p v-if="mode === 'brainflow'" class="notice" role="status">真实设备始终采集全部 16 路；当前选择 cap{{ classificationChannels }} 分类模型，默认绘制所选电极，可切换查看全部 16 路。质量检查范围：{{ qualityChannels(classificationChannels).join('、') }}（{{ qualityChannels(classificationChannels).length }} 路）。不替换或插值电极。训练权重仅供研究，未经本设备验证。</p>
     <section v-if="mode === 'brainflow' && running" class="panel demo-setup" aria-label="实时分类反馈">
       <p role="status">{{ adaptiveEvent?.waveform_model?.model || `cap${classificationChannels}` }} · {{ adaptiveEvent?.classification_channels || classificationChannels }} 通道分类 · {{ liveClassification ? `${liveClassification[0]} 模型分数 ${(liveClassification[1] * 100).toFixed(1)}%` : '等待有效脑电窗口' }}</p>
       <p role="status">{{ liveModelStatus }} · 窗口收集 {{ waveformCollection(adaptiveEvent) }}</p>
       <p v-if="liveClassification">W（清醒）{{ (adaptiveEvent.probabilities.W * 100).toFixed(1) }}% · N1（睡眠阶段1）{{ (adaptiveEvent.probabilities.N1 * 100).toFixed(1) }}% · N2（睡眠阶段2）{{ (adaptiveEvent.probabilities.N2 * 100).toFixed(1) }}%</p>
+      <WaveformQuality :event="adaptiveEvent" :count="classificationChannels" />
       <p>原始波形卷积神经网络（CNN）：每 6 秒处理最近 40 秒，预测代表最近 30 秒。模型分数不是校准置信度；仅供研究，未经本设备验证，不用于临床睡眠判断。无需个体基线。</p>
     </section>
     <p v-if="error" class="error-message" role="alert">{{ error }}</p>
@@ -249,17 +255,17 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
     <AutomaticAcePanel v-else-if="musicSource === 'ace'" ref="adaptivePanel" :event="adaptiveEvent" />
     <AdaptiveMusicPanel v-else ref="adaptivePanel" :event="adaptiveEvent" />
     <details class="workspace-details panel" @toggle="draw">
-      <summary>脑电波形与采集指标 <span>{{ enabledCount }} 通道 · {{ activeSampleRate }} Hz</span></summary>
-      <section class="metrics"><div><span>连接</span><strong>{{ connected ? '已连接' : '未连接' }}</strong></div><div><span>采样率</span><strong>{{ activeSampleRate }} Hz</strong></div><div><span>通道</span><strong>{{ enabledCount }} / {{ displayChannels.length }}</strong></div><div><span>累计样本</span><strong>{{ samplesEmitted.toLocaleString() }}</strong></div><div><span>时间</span><strong>{{ lastTimestamp.toFixed(1) }} s</strong></div></section>
+      <summary>脑电波形与采集指标 <span>采集 {{ displayChannels.length }} 路 · 分类 {{ mode === 'brainflow' ? classificationChannels : displayChannels.length }} 路 · 可见 {{ enabledCount }} 路 · {{ activeSampleRate }} Hz</span></summary>
+      <section class="metrics"><div><span>连接</span><strong>{{ connected ? '已连接' : '未连接' }}</strong></div><div><span>采样率</span><strong>{{ activeSampleRate }} Hz</strong></div><div><span>采集通道</span><strong>{{ displayChannels.length }}</strong></div><div><span>分类通道</span><strong>{{ mode === 'brainflow' ? classificationChannels : displayChannels.length }}</strong></div><div><span>可见通道</span><strong>{{ enabledCount }} / {{ plotIndices.length }}</strong></div><div><span>累计样本</span><strong>{{ samplesEmitted.toLocaleString() }}</strong></div><div><span>时间</span><strong>{{ lastTimestamp.toFixed(1) }} s</strong></div></section>
       <div class="control-card waveform-controls">
         <div class="control-group"><label for="display-seconds">显示窗口</label><select id="display-seconds" v-model="displaySeconds" @change="setDisplaySeconds"><option :value="3">3 秒</option><option :value="5">5 秒</option><option :value="10">10 秒</option></select></div>
         <div class="control-group"><label for="vertical-scale">幅度范围（±μV）</label><select id="vertical-scale" v-model="verticalScale"><option v-for="scale in [50,100,200,500,1000]" :key="scale" :value="scale">±{{ scale }} μV</option></select></div>
         <div class="actions"><button class="secondary" @click="togglePause">{{ paused ? '继续显示' : '暂停显示' }}</button><button class="secondary" @click="clearWaveform">清空</button></div>
       </div>
-      <section class="visual-panel"><div class="panel-heading"><div><h2>{{ displayChannels.length }} 通道波形</h2></div><label class="select-all"><input type="checkbox" :checked="enabledCount === displayChannels.length" @change="toggleAll" /> 全选通道</label></div><div class="canvas-wrap"><canvas ref="canvas" /></div><div class="channel-list"><label v-for="(channel, index) in displayChannels" :key="channel" class="channel-toggle" :style="{ '--channel-color': COLORS[index] }"><input v-model="channelEnabled[index]" type="checkbox" /><span>{{ index + 1 }} {{ channel }}</span></label></div></section>
+      <section class="visual-panel"><div class="panel-heading"><div><h2>{{ plotIndices.length }} 通道波形</h2></div><label v-if="mode === 'brainflow'" class="select-all"><input v-model="showAllChannels" type="checkbox" /> 查看全部 16 路</label><label class="select-all"><input type="checkbox" :checked="enabledCount === plotIndices.length" @change="toggleAll" /> 全选显示通道</label></div><div class="canvas-wrap"><canvas ref="canvas" /></div><div class="channel-list"><label v-for="{ name, index } in plottedChannels" :key="name" class="channel-toggle" :style="{ '--channel-color': COLORS[index] }"><input v-model="channelEnabled[index]" type="checkbox" /><span>{{ index + 1 }} {{ name }}</span></label></div></section>
       <p class="notice">显示波形经过 5–50 Hz 级联及 50 Hz 陷波；显示幅度有限制，不代表信号质量合格。</p>
     </details>
-    <details class="workspace-details panel"><summary>采集与播放说明</summary><p>开始采集同时启用音乐计划与本地播放，停止采集同时停止自动音乐。演示模型模式保留原有基线与质量要求；真实设备模式使用40秒波形窗口，无需个体基线，全部16路质量合格且分类稳定确认后才允许自动音乐。等待、无效或过期的实时分类会暂停音乐。演示信号不代表真实睡眠状态。</p><p>原始波形支持250/500/1000 Hz，当前模型仅接收250 Hz。真实模式请独占设备连接。研究原型，未验证助眠效果。</p></details>
+    <details class="workspace-details panel"><summary>采集与播放说明</summary><p>开始采集同时启用音乐计划与本地播放，停止采集同时停止自动音乐。演示模型模式保留原有基线与质量要求；真实设备模式使用40秒波形窗口，无需个体基线，所选模型要求的电极质量合格且分类稳定确认后才允许自动音乐（2 / 4 / 6 路只校验所选，旧 8 / 16 路仍校验全部 16 路）。等待、无效或过期的实时分类会暂停音乐。演示信号不代表真实睡眠状态。</p><p>原始波形支持250/500/1000 Hz，当前模型仅接收250 Hz。真实模式请独占设备连接。研究原型，未验证助眠效果。</p></details>
     <details class="workspace-details panel manual-tools"><summary>高级工具 · MIDI实验台</summary><MusicWorkbench /></details>
   </main>
   </div>

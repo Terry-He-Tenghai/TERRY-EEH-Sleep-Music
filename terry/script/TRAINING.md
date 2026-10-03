@@ -1,5 +1,7 @@
 # 8/16 通道原始波形训练
 
+> 2026-10-03：新增独立2/4/6路训练入口 `train_sleep_subset_models.py`。电极、质量范围、执行命令和实时集成见 `terry/docs/eeg-subset-model-integration-2026-10-03.md`。新模型仅检查所选电极；以下原8/16路训练契约保持不变。三套新模型实际训练结果须以新文档及各自report.json的完成记录为准。
+
 入口：`train_sleep_waveform_models.py`。原始 EDF/TXT 始终只读；本脚本不会替换网页的实时分类器或旧模型。
 
 ## 固定训练任务

@@ -47,7 +47,7 @@ def run_windows(monkeypatch, windows, count=8, broken_counter=False, *,
     return events
 
 
-@pytest.mark.parametrize('count', [8, 16])
+@pytest.mark.parametrize('count', [2, 4, 6, 8, 16])
 def test_model_warmup_confirmation_and_cached_ace_audio(monkeypatch, count):
     events = run_windows(monkeypatch, [signal(i * 1500) for i in range(8)], count)
     assert all(e['probabilities'] is None for e in events if e['timestamp_s'] < 40)
@@ -73,7 +73,7 @@ def test_model_warmup_confirmation_and_cached_ace_audio(monkeypatch, count):
     assert automatic.status()['status'] == 'paused'
 
 
-@pytest.mark.parametrize('count', [8, 16])
+@pytest.mark.parametrize('count', [2, 4, 6, 8, 16])
 def test_single_electrode_is_not_a_valid_model_input(monkeypatch, count):
     data = np.full((16, 1500), np.nan)
     data[2] = signal(0)[2]

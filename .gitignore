@@ -73,6 +73,18 @@ terry/results/waveform_cap_v1/cap8/*
 terry/results/waveform_cap_v1/cap16/*
 !terry/results/waveform_cap_v1/cap8/best.pt
 !terry/results/waveform_cap_v1/cap16/best.pt
+# Only independent deployment checkpoints; leave caches/evaluations ignored.
+!terry/results/waveform_subset_v1/
+terry/results/waveform_subset_v1/*
+!terry/results/waveform_subset_v1/cap2/
+!terry/results/waveform_subset_v1/cap4/
+!terry/results/waveform_subset_v1/cap6/
+terry/results/waveform_subset_v1/cap2/*
+terry/results/waveform_subset_v1/cap4/*
+terry/results/waveform_subset_v1/cap6/*
+!terry/results/waveform_subset_v1/cap2/best.pt
+!terry/results/waveform_subset_v1/cap4/best.pt
+!terry/results/waveform_subset_v1/cap6/best.pt
 terry/backEnd/results/raw_data/
 terry/backEnd/results/figures/*.png
 terry/backEnd/results/figures/*.pdf

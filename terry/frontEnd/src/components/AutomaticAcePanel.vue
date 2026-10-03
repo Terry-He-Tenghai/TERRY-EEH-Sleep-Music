@@ -1,4 +1,5 @@
 <script setup>
+import WaveformQuality from './WaveformQuality.vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { canPlayAutomatic, waveformCollection, waveformHoldReasons, waveformStatus } from '../audio/liveClassification.js'
 
@@ -9,7 +10,7 @@ const playing = ref(null), clock = ref(Date.now())
 const modelStatus = computed(() => waveformStatus(props.event, clock.value))
 const holdReasons = {
   configured_channel_order_mismatch: '16 路电极位置与现有模型不一致，需匹配帽位并重新训练验证',
-  live_inference_requires_8_or_16_channels: '分类需要 8 或 16 路脑电信号',
+  live_inference_requires_8_or_16_channels: '所选分类模型与脑电输入通道不匹配',
   physical_channel_map_unconfirmed_set_TERRY_EEG_CHANNEL_MAP_CONFIRMED_after_verification: '请先核实设备 CH0–CH15 的实际电极位置',
   configured_realtime_models_missing: '缺少与帽位匹配的分类模型',
   experimental_channel_mapping_contract_mismatch: '实验性电极映射与设备或模型的通道顺序不匹配',
@@ -128,7 +129,8 @@ defineExpose({ arm, stop })
     <p v-if="event?.status === 'blocked'" role="alert">{{ holdReasons[event.reason] || `分类阻断：${event.reason || '未知原因'}` }}</p>
     <template v-if="event?.source === 'LIVE'">
       <p role="status">{{ modelStatus }} · {{ event?.waveform_model?.model || '等待波形模型' }} · {{ event?.classification_channels || '—' }} 路分类 · 窗口收集 {{ waveformCollection(event) }}</p>
-      <p>原始波形卷积神经网络（CNN）· 无需个体基线。全部 16 路质量合格且分类稳定确认后才允许生成和播放。</p>
+      <p>原始波形卷积神经网络（CNN）· 无需个体基线。</p>
+      <WaveformQuality :event="event" />
       <p>模型仅供研究，未经本设备验证；W / N1 / N2 分数不是校准置信度。实时事件超过 15 秒未更新时暂停音乐。</p>
     </template>
     <p v-else-if="event?.demo_scripted">预设演示不触发 AI 生成。请使用模型验证或真实设备。</p>

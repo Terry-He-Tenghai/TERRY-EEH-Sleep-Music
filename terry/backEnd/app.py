@@ -49,7 +49,7 @@ class StartRequest(BaseModel):
     uploaded_track_id: str | None = Field(default=None, pattern=r'^user_[a-f0-9]{32}$')
     stem_track_id: StemTrackId | None = None
     sample_rate_hz: Literal[250, 500, 1000] = 250
-    classification_channels: Literal[8, 16] = 16
+    classification_channels: Literal[2, 4, 6, 8, 16] = 16
 
     @model_validator(mode='after')
     def exclusive_music_source(self):

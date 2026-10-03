@@ -40,7 +40,7 @@ class _Session:
     uploaded_track_id: str | None = None
     stem_track_id: StemTrackId | None = None
     demo_profile: Literal['model', 'showcase'] = 'model'
-    classification_channels: Literal[8, 16] = 16
+    classification_channels: Literal[2, 4, 6, 8, 16] = 16
     music_source: Literal['stems', 'upload', 'ace'] = 'stems'
     chunks: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=32))
     cancelled: threading.Event = field(default_factory=threading.Event)
@@ -85,8 +85,8 @@ class AdaptiveWebService:
             return copy.deepcopy(self._last)
 
     def start(self, mode: str, rate: int, channels: tuple[str, ...], music_style: str = 'all', uploaded_track_id: str | None = None, stem_track_id: StemTrackId | None = None, *, demo_profile: Literal['model', 'showcase'] = 'model', classification_channels: int = 16, music_source: Literal['stems', 'upload', 'ace'] = 'stems') -> int:
-        if classification_channels not in (8, 16):
-            raise ValueError('classification_channels must be 8 or 16')
+        if classification_channels not in (2, 4, 6, 8, 16):
+            raise ValueError('classification_channels must be 2, 4, 6, 8 or 16')
         if demo_profile not in ('model', 'showcase'):
             raise ValueError('Unknown demo profile')
         if demo_profile == 'showcase' and (mode != 'demo' or rate != 250):
@@ -358,7 +358,7 @@ class AdaptiveWebService:
         try:
             settings = load_settings()
             classifier = WaveformClassifier(ctx.channels, ctx.rate, ctx.classification_channels,
-                                            model_root=settings['model_root'])
+                                            model_root=settings.get('subset_model_root' if ctx.classification_channels in (2, 4, 6) else 'model_root'))
         except WaveformModelError as exc:
             self._fail(ctx, 'blocked', exc.reason)
             return
@@ -375,12 +375,13 @@ class AdaptiveWebService:
         previous_timestamp = previous_package = None
         timestamp_offsets = np.empty(0)
         last_stage, stage_count = None, 0
-        selected = list(classifier.contract.CAP16[:ctx.classification_channels])
+        selected = list(classifier.selected_channels)
 
         def hold(reason, end_s, *, frozen=False, result=None):
             self._emit(ctx, status='frozen' if frozen else 'waiting', reason=reason,
                        timestamp_s=end_s, probabilities=None, state=None, classification_confirmed=False,
-                       waveform_model=classifier.info() if result is None else result['info'],
+                       waveform_model={**(classifier.info() if result is None else result['info']),
+                                       'reset_reason': reason if reason != 'collecting_model_window' else None},
                        playback_mode='silent', notes=[], selected_track=None, track_status='not_selected',
                        current_music_state=None, target_music_state=None, signal_quality=0.0,
                        channel_repair=None, interpretable_features=None, inference_hold_reason=reason,
@@ -482,9 +483,9 @@ class AdaptiveWebService:
                                     n2_within_5m_probability=None, aasm_state_probabilities=probabilities,
                                     interpretable_features={})
                 repair = {'method': 'measured_waveform_no_imputation', 'usable': True,
-                          'valid_channels': list(ctx.channels), 'used_channels': selected,
+                          'valid_channels': list(classifier.quality_channels), 'used_channels': selected,
                           'selected_channels': selected, 'valid_fraction': 1.0, 'imputed_channels': [],
-                          'quality_scope': 'all_16_channels', 'window_end_s': end_s}
+                          'quality_scope': classifier.info()['quality_scope'], 'window_end_s': end_s}
                 fields = dict(timestamp_s=end_s, probabilities=probabilities,
                               waveform_model=result['info'], classification_confirmed=confirmed,
                               state={'status': 'ok', 'baseline_ready': False, 'window_end_s': end_s,

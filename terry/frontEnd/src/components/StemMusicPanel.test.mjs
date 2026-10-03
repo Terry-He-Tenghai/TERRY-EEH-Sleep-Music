@@ -52,6 +52,16 @@ test('live spectral classification permits 8 or 16 channel stem feedback without
   }
 })
 
+test('all waveform model sizes support stems without relaxing confirmation or quality gates', () => {
+  for (const count of [2, 4, 6, 8, 16]) {
+    const e = { ...event(), inference_mode: 'waveform_cnn', probability_origin: 'trained_waveform_cnn_experimental',
+      classification_channels: count, classification_confirmed: true, state: { status: 'ok', baseline_ready: false } }
+    assert.equal(validateStemFrame(e, 'Track00008').mode, 'adaptive')
+    assert.throws(() => validateStemFrame({ ...e, classification_confirmed: false }, 'Track00008'))
+    assert.throws(() => validateStemFrame({ ...e, signal_quality: .99 }, 'Track00008'))
+  }
+})
+
 test('conservative plan has no fabricated EEG control value', () => {
   const e=event(); e.playback_mode='conservative'; e.stem_mix.mode='conservative'; e.stem_mix.control_level=null
   e.stem_mix.gains={piano:.12,strings:.08,bass:.02,pad:.10}
