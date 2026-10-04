@@ -56,7 +56,7 @@ def test_invalid_signal_never_invokes_predictor(bad):
     result = model.update(np.full((16, 10000), bad), 40)
     assert result['status'] == 'invalid'
     assert result['probabilities'] is None
-    assert result['info']['collected_seconds'] == 0
+    assert result['info']['collected_seconds'] == (40 if bad == 0.0 else 0)
 
 
 def test_missing_weights_and_incompatible_acquisition_are_explicit(tmp_path):

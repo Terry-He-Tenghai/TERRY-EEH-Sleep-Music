@@ -36,7 +36,8 @@ def test_selected_bad_channel_is_reported_and_never_classified(count, bad, reaso
     assert result['status'] == 'invalid'
     assert result['info']['quality_reason'] == reason
     assert any(d['channel'] == name and d['reason'] == reason for d in result['info']['quality_details'])
-    assert result['info']['collected_seconds'] == 0
+    assert result['info']['collected_seconds'] == (0 if reason == 'nonfinite' else 40)
+    assert result['info']['buffer_retained'] is (reason != 'nonfinite')
 
 
 @pytest.mark.parametrize('count', [2, 4, 6])
@@ -50,6 +51,25 @@ def test_selected_index_mapping_matches_training_preprocessing(count):
     filtered, reason = code.preprocess_window(selected, 250, count)
     assert reason is None
     np.testing.assert_array_equal(seen[0], code.model_input(filtered, count))
+
+
+@pytest.mark.parametrize('count', [2, 4, 6, 8, 16])
+def test_finite_bad_window_rolls_forward_without_restarting_40_seconds(count):
+    calls = []
+    model = WaveformClassifier(CAP_ORDER, 250, count, predictor=lambda x: calls.append(x) or [.7, .2, .1])
+    raw = signal()
+    index = CAP_ORDER.index(model.selected_channels[0])
+    raw[index, 2500:3250] = 0  # Three flat seconds in the 30-second QC window.
+    result = model.update(raw, 40)
+    assert result['status'] == 'invalid'
+    assert not calls
+    assert result['info']['buffer_retained'] is True
+    assert result['info']['reset_reason'] is None
+    assert result['info']['collected_seconds'] == 40
+    result = model.update(signal()[:, :1500], 46)
+    assert result['status'] == 'ready'  # Bad seconds are now only past context.
+    assert len(calls) == 1
+    assert result['info']['collected_seconds'] == 40
 
 
 def test_old_central_checkpoint_cannot_be_loaded_as_frontal(tmp_path):

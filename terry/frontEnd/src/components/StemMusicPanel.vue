@@ -6,9 +6,10 @@ const props = defineProps({ event: Object, track: Object })
 const playback = shallowRef({ status: 'stopped', stems: [], volume: .18, strength: .85, bypass: false })
 const engine = new StemEngine({ onUpdate: value => { playback.value = value } })
 const roles = { piano: '钢琴', strings: '弦乐', bass: '低音', pad: '铺底' }
-const labels = { stopped: '已停止', buffering: '加载中', waiting: '准备中', playing: '同步播放中', fading: '渐出中' }
+const labels = { stopped: '已停止', buffering: '加载中', waiting: '准备中', holding: '等待新数据 · 音乐保持', playing: '同步播放中', fading: '渐出中' }
 const provenance = computed(() => props.event?.demo_scripted ? '预设演示 · 非模型预测' : props.event?.source === 'LIVE' ? 'LIVE · 实时脑电' : 'DEMO · 模型验证')
 const stage = computed(() => {
+  if (playback.value.status === 'holding') return '等待新数据'
   if (!playback.value.applied) return '—'
   if (props.event?.demo_scripted) return props.event.demo_stage || '—'
   if (playback.value.applied.mode === 'conservative') return '准备中'
@@ -68,7 +69,7 @@ defineExpose({ arm, stop })
       <p v-if="event?.demo_scripted">动态音乐演示 · 非机器学习预测。当前预设 {{ event.demo_stage }}；24秒一段。预设权重仅测试控制链路。</p>
       <p v-if="playback.applied">已应用序号 {{ playback.applied.sequence }} · 控制量 {{ playback.applied.control_level?.toFixed(2) ?? '固定混音' }} · 低通 {{ Math.round(playback.cutoff) }} Hz · {{ playback.applied.transition_seconds }}秒渐变。</p>
       <p>强度0保留原自适应映射，100扩大声部对比和550–7200Hz音色范围；准备期不增强。对照将四轨固定为0.3增益，不包含原曲所有声部，也未做等响度匹配。曲目本身的演奏变化也影响频谱，不能把所有图形变化归因于脑电。</p>
-      <p>当前是分轨混音，不是MIDI音符编辑。模型模式仍需约300秒有效基线；演示为预设，不代表睡眠分类。断流、切后台或停止采集会停止声音。请先调低设备音量。</p>
+      <p>当前是分轨混音，不是MIDI音符编辑。模型模式仍需约300秒有效基线；演示为预设，不代表睡眠分类。LIVE质量不合格或断流超过15秒时保持已播放音乐与上次参数，等待质量合格的新数据，不启动新音乐或动态调节；切后台或停止采集会停止声音。请先调低设备音量。</p>
       <button @click="download">导出分轨控制日志</button>
     </details>
   </section>

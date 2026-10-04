@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { ref, computed, watch, reactive } from 'vue'
 import { parse, compileScript, compileTemplate } from 'vue/compiler-sfc'
-import { liveClassification, isFreshLiveEvent, canPlayAutomatic, waveformStatus, waveformCollection, waveformHoldReasons } from '../audio/liveClassification.js'
+import { liveClassification, isFreshLiveEvent, canPlayAutomatic, canContinueAutomatic, musicStateLabels, waveformStatus, waveformCollection, waveformHoldReasons } from '../audio/liveClassification.js'
 
 const now = 100000
 const ready = () => ({ source: 'LIVE', session_id: '1', emitted_at_s: now / 1000,
@@ -48,7 +48,7 @@ test('model warmup and all new hold reasons have explicit labels', () => {
     'waveform_model_load_failed', 'waveform_requires_full_cap_capture', 'waveform_model_configuration_error']) {
     assert.equal(waveformStatus({ ...ready(), reason }, now), waveformHoldReasons[reason])
   }
-  assert.match(waveformStatus(ready(), now + 15001), /暂停/)
+  assert.match(waveformStatus(ready(), now + 15001), /已有音乐继续播放/)
 })
 
 const panel = readFileSync(new URL('./AutomaticAcePanel.vue', import.meta.url), 'utf8')
@@ -83,12 +83,14 @@ function harness(fetcher, decode = async () => ({})) {
   const script = parse(panel).descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace('import.meta.env.VITE_API_BASE', "''")
   // Execute the actual script-setup functions with mocked browser/audio/timer APIs.
   const names = ['ref', 'computed', 'watch', 'onBeforeUnmount', 'defineProps', 'defineExpose', 'window', 'fetch',
-    'setInterval', 'clearInterval', 'Date', 'canPlayAutomatic', 'waveformCollection', 'waveformHoldReasons', 'waveformStatus']
+    'setInterval', 'clearInterval', 'Date', 'canPlayAutomatic', 'canContinueAutomatic', 'liveClassification', 'musicStateLabels', 'waveformCollection', 'waveformHoldReasons', 'waveformStatus']
   const fakeDate = { now: () => time }
-  const exposed = new Function(...names, `${script}\nreturn { arm, stop, refresh }`)(
+  const exposed = new Function(...names, `${script}\nreturn { arm, stop, refresh, classifiedStage, lastClassification, hasCurrentClassification }`)(
     ref, computed, watch, fn => { cleanup = fn }, () => props, () => {}, { AudioContext }, fetcher,
     fn => { interval = fn; return 1 }, () => {}, fakeDate,
-    (event, timestamp = time) => canPlayAutomatic(event, timestamp), waveformCollection, waveformHoldReasons,
+    (event, timestamp = time) => canPlayAutomatic(event, timestamp),
+    (event, session, timestamp = time) => canContinueAutomatic(event, session, timestamp),
+    liveClassification, musicStateLabels, waveformCollection, waveformHoldReasons,
     (event, timestamp = time) => waveformStatus(event, timestamp))
   return { ...exposed, props, nodes, tick: () => interval(), setTime: value => { time = value }, cleanup: () => cleanup() }
 }
@@ -96,7 +98,24 @@ const statusResponse = { ok: true, json: async () => ({ status: 'ready', session
 const audioResponse = { ok: true, arrayBuffer: async () => new ArrayBuffer(1) }
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-test('looping audio stops on stale LIVE event without another backend message', async () => {
+test('panel displays inferred W/N1/N2 separately from M music plans and labels history honestly', () => {
+  const h = harness(async () => statusResponse)
+  try {
+    for (const stage of ['W', 'N1', 'N2']) {
+      const probabilities = { W: .1, N1: .1, N2: .1 }; probabilities[stage] = .8
+      h.props.event = { ...ready(), probabilities, current_music_state: 'M3' }
+      assert.ok(h.classifiedStage.value.startsWith(stage + '（'))
+      assert.equal(h.classifiedStage.value.includes('M3'), false)
+    }
+    h.props.event = { ...ready(), status: 'frozen', probabilities: null, state: null,
+      classification_confirmed: false, reason: 'invalid_or_low_quality_eeg' }
+    assert.equal(h.hasCurrentClassification.value, false)
+    assert.match(h.classifiedStage.value, /当前不可用/)
+    assert.match(h.lastClassification.value.stage, /^N2/)
+  } finally { h.cleanup() }
+})
+
+test('looping audio continues on stale LIVE event without fetching new music', async () => {
   let calls = 0
   const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse)
   try {
@@ -104,9 +123,53 @@ test('looping audio stops on stale LIVE event without another backend message', 
     assert.equal(h.nodes[0].started, true)
     h.setTime(now + 15001)
     await h.tick()
-    assert.equal(h.nodes[0].stopped, true)
+    assert.notEqual(h.nodes[0].stopped, true)
     assert.equal(calls, 2, 'no fetch is issued for stale input')
+    h.stop()
+    assert.equal(h.nodes[0].stopped, true, 'manual stop remains effective')
   } finally { h.cleanup() }
+})
+
+test('device silence preserves existing music but session changes and explicit stop silence it', async () => {
+  let calls = 0
+  const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse)
+  try {
+    await h.arm(); await settle()
+    h.props.event = { ...ready(), status: 'frozen', classification_confirmed: false,
+      probabilities: null, state: null, reason: 'waiting_for_live_data' }
+    assert.notEqual(h.nodes[0].stopped, true)
+    await h.tick()
+    assert.equal(calls, 2)
+    h.props.event = { ...ready(), session_id: 'new' }
+    assert.equal(h.nodes[0].stopped, true)
+  } finally { h.cleanup() }
+})
+
+test('quality rejection keeps existing ACE music and never fetches a replacement', async () => {
+  let calls = 0
+  const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse)
+  try {
+    await h.arm(); await settle()
+    h.props.event = { ...ready(), status: 'frozen', classification_confirmed: false,
+      state: null, probabilities: null, reason: 'invalid_or_low_quality_eeg', playback_mode: 'silent' }
+    assert.notEqual(h.nodes[0].stopped, true)
+    h.setTime(now + 60000)
+    await h.tick()
+    assert.notEqual(h.nodes[0].stopped, true)
+    assert.equal(calls, 2)
+    h.stop()
+    assert.equal(h.nodes[0].stopped, true)
+  } finally { h.cleanup() }
+})
+
+test('stale events never grant new playback and explicit terminal states revoke continuation', () => {
+  assert.equal(canPlayAutomatic(ready(), now + 15001), false)
+  assert.equal(canContinueAutomatic(ready(), '1', now + 15001), true)
+  for (const status of ['stopped', 'blocked', 'error']) {
+    assert.equal(canContinueAutomatic({ ...ready(), status }, '1', now + 15001), false)
+  }
+  assert.equal(canContinueAutomatic(ready(), null, now + 15001), false)
+  assert.equal(canContinueAutomatic(ready(), 'different', now + 15001), false)
 })
 
 test('freshness is checked after asynchronous audio decoding', async () => {
@@ -120,8 +183,8 @@ test('freshness is checked after asynchronous audio decoding', async () => {
   } finally { h.cleanup() }
 })
 
-test('waiting and nonconfirmed events stop sound immediately even with unchanged status', async () => {
-  for (const patch of [{ status: 'waiting' }, { classification_confirmed: false }, { state: { status: 'invalid' } }]) {
+test('nonconfirmed or malformed ready events cannot authorize playback', async () => {
+  for (const patch of [{ classification_confirmed: false }, { state: { status: 'invalid' } }]) {
     let calls = 0
     const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse)
     try {

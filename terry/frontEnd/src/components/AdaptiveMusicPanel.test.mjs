@@ -40,7 +40,7 @@ function harness() {
     nodes.push(n); return n
   }
   const engine = new AdaptiveEngine()
-  engine.ctx = { currentTime: 0, state: 'running', createGain: node, createBufferSource: node, createOscillator: node }
+  engine.ctx = { close: () => Promise.resolve(), currentTime: 0, state: 'running', createGain: node, createBufferSource: node, createOscillator: node }
   engine.master = node(); engine.compressor = node(); engine.filter = node(); engine.wet = node()
   engine.buses = Object.fromEntries(['pad','melody','bass','texture'].map(v => [v, { gain: node(), pan: node() }]))
   engine.buffer = {}; engine.bufferId = 'user_test'; engine.bufferLoudness = { gain: 4 }
@@ -81,12 +81,72 @@ test('fresh plans schedule continuously for ten minutes without restarting bed',
   assert.ok(engine.events.filter(e => e.type === 'phrase-scheduled').length >= 37)
   assert.equal(engine.events.filter(e => e.type === 'track-crossfade-scheduled').length, 1)
 })
-test('stale plans still trigger fade rather than indefinite playback', () => {
+test('DEMO stale plans retain the existing fade policy', () => {
   const { engine, plan } = harness()
   engine.armed = true; engine.pending = plan; engine.lastReadyAt = performance.now()
+  engine.source = 'DEMO'
   engine.readyTimestamp = Date.now() - 16000
   let reason
   engine.fadeStop = value => { reason = value }
   engine.tick()
   assert.match(reason, /15秒/)
+})
+
+function liveEvent(sequence = 1) {
+  return { type: 'adaptive_music', source: 'LIVE', session_id: 'live', sequence, timestamp_s: Date.now()/1000,
+    status: 'ready', music_state: 'M1', target_music_state: 'M1', signal_quality: 1,
+    probabilities: { W: .8, N1: .15, N2: .05 }, track: { id: 'user_test' }, gains: { master: .18 }, notes: [] }
+}
+function liveHarness() {
+  const { engine } = harness()
+  engine.armed = true; engine.armedAt = Date.now(); engine.sequence = -1
+  return engine
+}
+function startLive(engine) {
+  engine.consume(liveEvent()); engine.tick()
+  engine.ctx.currentTime = .2; engine.tick()
+  assert.equal(engine.status, 'playing')
+}
+test('LIVE expired plan keeps bed, freezes scheduling, preserves EEG freshness and resumes on new data', () => {
+  const engine = liveHarness(); startLive(engine)
+  const source = engine.trackSource.source, ready = engine.lastReadyAt
+  const phrases = engine.events.filter(e => e.type === 'phrase-scheduled').length
+  engine.readyTimestamp = Date.now()-16000
+  const stamp = engine.readyTimestamp
+  for (const time of [16, 32, 48, 64]) { engine.ctx.currentTime = time; engine.tick() }
+  assert.equal(engine.status, 'holding'); assert.equal(engine.armed, true)
+  assert.equal(source.stopTime, undefined); assert.equal(engine.trackSource.source, source)
+  assert.equal(engine.lastReadyAt, ready); assert.equal(engine.readyTimestamp, stamp)
+  assert.equal(engine.events.filter(e => e.type === 'phrase-scheduled').length, phrases)
+  engine.consume({ ...liveEvent(2), timestamp_s: (Date.now()-16000)/1000 })
+  assert.equal(engine.sequence, 1); assert.equal(engine.lastReadyAt, ready)
+  engine.consume(liveEvent(3)); engine.ctx.currentTime = 64.2; engine.tick()
+  assert.equal(engine.status, 'playing'); assert.equal(engine.activeSequence, 3)
+  assert.equal(engine.trackSource.source, source)
+  engine.stop(); assert.equal(engine.sources.size, 0); assert.equal(source.stopTime, undefined)
+  assert.equal(engine.armed, false); assert.equal(engine.ctx, null)
+})
+test('LIVE waiting or rejected quality retains audio but cannot start an unplayed plan', () => {
+  for (const reason of ['waiting_for_live_data', 'invalid_or_low_quality_eeg']) for (const started of [false, true]) {
+    const engine = liveHarness()
+    if (started) startLive(engine)
+    else engine.consume(liveEvent())
+    const ready = engine.lastReadyAt
+    engine.consume({ ...liveEvent(2), status: 'frozen', reason })
+    engine.ctx.currentTime = 32; engine.tick()
+    assert.equal(engine.lastReadyAt, ready)
+    assert.equal(engine.sources.size, started ? 1 : 0)
+    assert.equal(engine.status, started ? 'holding' : 'waiting')
+    engine.consume(liveEvent(3)); engine.tick()
+    assert.equal(engine.liveHeld, false)
+    engine.dispose(); assert.equal(engine.sources.size, 0)
+  }
+})
+test('LIVE unplayed plan that expires never starts; session change and stopped events stop held audio', () => {
+  const idle = liveHarness(); idle.consume(liveEvent()); idle.readyTimestamp = Date.now()-16000; idle.tick()
+  assert.equal(idle.sources.size, 0); assert.ok(idle.origin == null); idle.stop()
+  for (const finalEvent of [{ ...liveEvent(3), session_id: 'new' }, { ...liveEvent(1), status: 'stopped', timestamp_s: (Date.now()-16000)/1000 }]) {
+    const engine = liveHarness(); startLive(engine); engine.readyTimestamp = Date.now()-16000; engine.tick()
+    engine.consume(finalEvent); assert.equal(engine.armed, false); assert.equal(engine.sources.size, 0)
+  }
 })

@@ -178,10 +178,12 @@ class WaveformClassifier:
 
     def _invalid(self, reason, samples):
         details = self._quality_details(samples)
-        self.reset()
+        retain = reason in ('flat_signal', 'high_amplitude', 'low_variation') and self.buffer.shape[1] == 40 * self.rate
+        if not retain:
+            self.reset()
         return {'status': 'invalid', 'reason': reason, 'probabilities': None,
-                'info': {**self.info(), 'quality_reason': reason, 'reset_reason': reason,
-                         'quality_details': details}}
+                'info': {**self.info(), 'quality_reason': reason, 'reset_reason': None if retain else reason,
+                         'buffer_retained': retain, 'quality_details': details}}
 
     def update(self, samples_uv, end_s):
         samples = np.asarray(samples_uv, dtype=float)

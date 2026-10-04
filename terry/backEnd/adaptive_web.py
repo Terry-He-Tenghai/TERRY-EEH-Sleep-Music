@@ -403,7 +403,7 @@ class AdaptiveWebService:
             self._emit(ctx, status='frozen' if frozen else 'waiting', reason=reason,
                        timestamp_s=end_s, probabilities=None, state=None, classification_confirmed=False,
                        waveform_model={**(classifier.info() if result is None else result['info']),
-                                       'reset_reason': reason if reason != 'collecting_model_window' else None},
+                                       'reset_reason': result['info'].get('reset_reason') if result is not None else (reason if reason != 'collecting_model_window' else None)},
                        playback_mode='silent', notes=[], selected_track=None, track_status='not_selected',
                        current_music_state=None, target_music_state=None, signal_quality=0.0,
                        channel_repair=None, interpretable_features=None, inference_hold_reason=reason,

@@ -91,14 +91,61 @@ test('fresh frames sustain ten minutes, repeated sequence cannot refresh freshne
   assert.ok(sources.length >= 120)
   const old=engine.lastReady
   engine.consume(event(engine.sequence)); assert.equal(engine.lastReady,old)
-  engine.serverStamp=Date.now()-16000; engine.tick(); assert.equal(engine.status,'fading')
-  const gain=engine.master.gain.value; engine.setVolume(.3); assert.equal(engine.master.gain.value,gain)
+  engine.serverStamp=Date.now()-16000; engine.tick(); assert.equal(engine.status,'holding')
+  const gain=engine.master.gain.value; engine.setStrength(.2); assert.equal(engine.master.gain.value,gain)
   engine.stop()
 })
-test('invalid electrodes silence without reusing prior classification; recovery starts afresh', () => {
-  const { engine }=harness(); engine.consume(event()); engine.tick()
-  engine.consume({ ...event(2), status:'frozen', stem_mix:null, reason:'no_valid_electrodes' })
-  assert.equal(engine.entries.size,0); assert.equal(engine.plan,null)
+test('LIVE invalid electrodes keep existing stems without new classification; recovery resumes controls', () => {
+  const { engine }=harness(); engine.consume(event()); engine.tick(); engine.ctx.currentTime = .1
+  const plan = engine.plan, applied = engine.applied, freshness = engine.lastReady
+  engine.consume({ ...event(2), status:'frozen', stem_mix:null, reason:'invalid_or_low_quality_eeg', probabilities: null, state: null })
+  assert.equal(engine.entries.size,4); assert.equal(engine.plan,plan); assert.equal(engine.applied, applied)
+  assert.equal(engine.liveHeld, true); assert.equal(engine.lastReady, freshness)
   engine.consume(event(3)); engine.tick(); assert.equal(engine.entries.size,4)
+  assert.equal(engine.liveHeld, false); assert.equal(engine.applied.sequence, 3)
   engine.stop()
+})
+
+test('LIVE stale stems retain the applied mix through loop cycles and resume only with fresh data', () => {
+  const { engine, sources } = harness(); engine.consume(event()); engine.tick()
+  const applied = engine.applied, ready = engine.lastReady
+  engine.serverStamp = Date.now()-16000
+  const stamp = engine.serverStamp
+  engine.ctx.currentTime = 19; engine.tick()
+  assert.equal(engine.status, 'holding'); assert.equal(engine.entries.size, 8)
+  assert.equal(sources.length, 8); assert.equal(engine.master.gain.value, .18)
+  engine.setStrength(.1); engine.setComparison(true)
+  assert.equal(engine.applied, applied); assert.equal(engine.lastReady, ready); assert.equal(engine.serverStamp, stamp)
+  engine.consume({ ...event(2), emitted_at_s: (Date.now()-16000)/1000 })
+  assert.equal(engine.sequence, 1); assert.equal(engine.applied, applied)
+  engine.consume(event(3)); engine.tick()
+  assert.equal(engine.status, 'playing'); assert.equal(engine.applied.sequence, 3)
+  engine.stop(); assert.equal(engine.entries.size, 0); assert.equal(engine.armed, false)
+  assert.ok(sources.every(s => s.end === undefined))
+})
+test('LIVE waiting for data holds started stems, prevents delayed start, and stops on session change or unload', () => {
+  for (const started of [false, true]) {
+    const { engine } = harness(); engine.consume(event())
+    if (started) { engine.tick(); engine.ctx.currentTime = .1; engine.tick() }
+    const ready = engine.lastReady
+    engine.consume({ ...event(2), status: 'frozen', stem_mix: null, reason: 'waiting_for_live_data' })
+    engine.tick()
+    assert.equal(engine.entries.size, started ? 4 : 0)
+    assert.equal(engine.status, started ? 'holding' : 'waiting'); assert.equal(engine.lastReady, ready)
+    engine.consume(event(3)); engine.tick(); assert.equal(engine.entries.size, 4)
+    engine.consume({ ...event(4), session_id: 2 }); assert.equal(engine.armed, false); assert.equal(engine.entries.size, 0)
+    engine.dispose()
+  }
+  const { engine } = harness(); engine.consume(event()); engine.serverStamp = Date.now()-16000; engine.tick()
+  assert.equal(engine.entries.size, 0); assert.equal(engine.origin, undefined)
+  engine.dispose()
+})
+test('LIVE held stems obey stopped events and disposal', () => {
+  for (const dispose of [false, true]) {
+    const { engine } = harness(); engine.consume(event()); engine.tick()
+    engine.serverStamp = Date.now()-16000; engine.tick()
+    if (dispose) engine.dispose()
+    else engine.consume({ ...event(1), emitted_at_s: (Date.now()-16000)/1000, status: 'stopped', stem_mix: null })
+    assert.equal(engine.entries.size, 0); assert.equal(engine.armed, false)
+  }
 })

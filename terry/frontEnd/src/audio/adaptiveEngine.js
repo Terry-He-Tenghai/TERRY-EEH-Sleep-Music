@@ -176,9 +176,10 @@ export class AdaptiveEngine {
     if (!this.armed || !event) return
     try {
       event = normalizeAdaptiveEvent(event)
+      if (this.session && event.session_id !== this.session) throw new Error('采集会话已改变，请重新启动采集')
       validateAdaptiveEvent(event)
       if (event.status === 'ready' && event.timestamp_s * 1000 < this.armedAt - 1000) throw new Error('忽略启动前的旧事件，请重新启动采集')
-      if (this.session && event.session_id !== this.session) throw new Error('采集会话已改变，请重新启动采集')
+      if (['stopped', 'error'].includes(event.status)) { this.stop(text(event.reason) || event.status, event.status); return }
       if (event.sequence <= this.sequence) return // Duplicates never refresh the freshness deadline.
       this.session = event.session_id; this.sequence = event.sequence; this.source = event.source
       const probabilities = event.probabilities || event.state_probabilities
@@ -187,7 +188,10 @@ export class AdaptiveEngine {
         probabilities: probabilities ? { W: probabilities.W, N1: probabilities.N1, N2: probabilities.N2 } : null,
         signal_quality: event.signal_quality, music_state: event.music_state, target_music_state: event.target_music_state })
       if (event.status !== 'ready') {
-        if (['stopped', 'error'].includes(event.status)) { this.stop(text(event.reason) || event.status, event.status); return }
+        if (event.source === 'LIVE' && ['waiting', 'frozen'].includes(event.status)) {
+          this.holdLive(); this.publish(); return
+        }
+        this.liveHeld = false
         const electrodeHold = ['no_valid_electrodes', 'invalid_or_low_quality_eeg', 'insufficient_valid_channels_rechecking'].includes(event.reason)
         const fresh = Number.isFinite(event.timestamp_s) && Math.abs(Date.now() - event.timestamp_s * 1000) <= STALE_MS
         if (electrodeHold && fresh && this.currentPlan && this.activeTrack) {
@@ -203,6 +207,7 @@ export class AdaptiveEngine {
         this.reason = text(event.reason) || '等待后端许可；已静音'; this.publish(); return
       }
       if (this.fadeStopTimer) return // Finish a timed fade; re-arm explicitly afterwards.
+      this.liveHeld = false
       this.qualityHoldAt = null
       this.lastReadyAt = performance.now(); this.readyTimestamp = event.timestamp_s * 1000
       this.pending = {
@@ -224,7 +229,34 @@ export class AdaptiveEngine {
         this.status = this.activeTrack ? 'playing' : 'ready'
       }
       this.publish()
-    } catch (error) { this.stop(error.message, 'blocked') }
+    } catch (error) {
+      if (event.source === 'LIVE' && /事件时间戳过期或时钟不同步/.test(error.message)) { this.holdLive(); this.publish() }
+      else this.stop(error.message, 'blocked')
+    }
+  }
+  holdLive() {
+    if (this.trackSource && this.origin != null && this.ctx.currentTime < this.origin) this.silence()
+    if (!this.liveHeld && this.ctx) {
+      const at = this.ctx.currentTime
+      const parameters = [this.master.gain, this.filter.frequency, this.wet.gain,
+        ...voices.flatMap(voice => [this.buses[voice].gain.gain, this.buses[voice].pan.pan])]
+      for (const param of parameters) {
+        if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(at)
+        else { const value = param.value; param.cancelScheduledValues(at); param.setValueAtTime(value, at) }
+      }
+    }
+    if (this.transitionPlan && this.ctx.currentTime >= this.transitionPlan.at) {
+      this.currentPlan = this.transitionPlan.plan; this.activeState = this.currentPlan.music_state
+      this.activeSequence = this.currentPlan.sequence; this.activeNotes = this.currentPlan.notes; this.transitionPlan = null
+    }
+    if (this.transitionTrack && this.ctx.currentTime >= this.transitionTrack.at) {
+      this.activeTrack = this.transitionTrack.track; this.fadingTrack = null; this.transitionTrack = null
+    }
+    this.qualityHoldAt = null
+    this.liveHeld = true; this.pending = this.currentPlan || null
+    this.loadToken++; this.abort?.abort(); this.loadingId = null
+    this.status = this.trackSource ? 'holding' : 'waiting'
+    this.reason = this.trackSource ? '等待新的实时脑电数据；保持已播放音乐与上次参数，暂停新乐句和切换' : '等待新的实时脑电数据；尚未播放'
   }
   async loadTrack(id) {
     this.abort?.abort()
@@ -350,7 +382,16 @@ export class AdaptiveEngine {
     if (document.hidden) { this.stop('页面隐藏'); return }
     if (this.fadeStopTimer) return
     if (this.qualityHoldAt != null && performance.now() - this.qualityHoldAt >= 30000) { this.fadeStop('电极持续失效，8秒渐出停止'); return }
-    if (this.qualityHoldAt == null && this.lastReadyAt && (performance.now() - this.lastReadyAt > STALE_MS || Date.now() - this.readyTimestamp > STALE_MS)) { this.fadeStop('超过15秒无新计划，8秒渐出停止'); return }
+    if (this.qualityHoldAt == null && this.lastReadyAt && (performance.now() - this.lastReadyAt > STALE_MS || Date.now() - this.readyTimestamp > STALE_MS)) {
+      if (this.source === 'LIVE') this.holdLive()
+      else { this.fadeStop('超过15秒无新计划，8秒渐出停止'); return }
+    }
+    if (this.liveHeld) {
+      // The looping bed and already scheduled notes remain audible; no stale
+      // plan may schedule a replacement track or a new MIDI phrase.
+      if (this.origin != null) this.nextPhrase = Math.max(this.nextPhrase, Math.floor((this.ctx.currentTime - this.origin) / PHRASE) + 1)
+      this.publish(); return
+    }
     if (!this.pending || this.ctx.state !== 'running') return
     const now = this.ctx.currentTime
     if (this.origin == null) {
@@ -362,7 +403,8 @@ export class AdaptiveEngine {
     if (boundary <= now + .12) {
       // A replacement that is still downloading never silences the old bed mid-phrase.
       const plan = this.bufferId === this.pending.track.id ? this.pending : this.currentPlan
-      if (plan) this.schedulePhrase(plan, boundary)
+      const planFresh = plan?.source !== 'LIVE' || (Number.isFinite(plan.timestamp_s) && Date.now() + Math.max(0, boundary - now) * 1000 - plan.timestamp_s * 1000 <= STALE_MS)
+      if (plan && planFresh) this.schedulePhrase(plan, boundary)
       this.nextPhrase++
     }
     if (this.transitionTrack && now >= this.transitionTrack.at) {
@@ -387,6 +429,7 @@ export class AdaptiveEngine {
     this.transitionTrack = null; this.transitionPlan = null; this.origin = null; this.nextPhrase = 0; this.lastFrame = 0
   }
   stop(reason = '用户停止', status = 'stopped') {
+    this.liveHeld = false
     this.generation++; this.armed = false; clearInterval(this.timer); this.timer = null
     clearTimeout(this.fadeStopTimer); this.fadeStopTimer = null; this.qualityHoldAt = null
     this.silence(); this.status = status; this.reason = reason

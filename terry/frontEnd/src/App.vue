@@ -124,8 +124,8 @@ function connectSocket() {
       }
     } catch { error.value = '后端消息格式无效'; adaptivePanel.value?.stop('invalid-stream-message') }
   }
-  socket.onerror = () => { error.value = '无法连接后端 WebSocket'; adaptivePanel.value?.stop('websocket-error') }
-  socket.onclose = () => { ws.value = null; connected.value = false; error.value = 'WebSocket 已断开，波形不再更新，请重新连接'; adaptivePanel.value?.stop('websocket-disconnected') }
+  socket.onerror = () => { error.value = '无法连接后端 WebSocket'; if (mode.value !== 'brainflow') adaptivePanel.value?.stop('websocket-error') }
+  socket.onclose = () => { ws.value = null; connected.value = false; error.value = 'WebSocket 已断开，波形不再更新，请重新连接'; if (mode.value !== 'brainflow') adaptivePanel.value?.stop('websocket-disconnected') }
 }
 async function startAcquisition() {
   if (startingAcquisition.value || uploading.value) return
@@ -212,7 +212,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
         <template v-else><strong>已选择：{{ uploadedTrack.displayName }}</strong><span>本次采集保持此背景，MIDI 声部自动变化。</span></template>
       </div>
       <footer class="music-setup__footer">
-        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类；实时模式使用本地训练的波形CNN，仅供研究、未经本设备验证，预设演示不触发生成。远端处理期间保持等待，断流后暂停播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
+        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类；实时模式使用本地训练的波形CNN，仅供研究、未经本设备验证，预设演示不触发生成。远端处理期间保持等待，断流后暂停分类驱动更新，已开始的音乐继续播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
       </footer>
       <p v-if="musicChoiceError" class="error-message" role="alert">{{ musicChoiceError }}</p>
     </section>

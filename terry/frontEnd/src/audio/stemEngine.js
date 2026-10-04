@@ -9,10 +9,10 @@ const TRACKS = Array.from({ length: 20 }, (_, index) => `Track${String(index + 1
 export function validateStemFrame(raw, trackId, now = Date.now()) {
   if (!raw || raw.type !== 'adaptive_music' || !['LIVE', 'DEMO'].includes(raw.source)) throw new Error('分轨事件来源无效')
   if (!['string', 'number'].includes(typeof raw.session_id) || !String(raw.session_id) || !Number.isSafeInteger(raw.sequence) || raw.sequence < 0) throw new Error('分轨会话序号无效')
-  const stamp = raw.emitted_at_s
-  if (!Number.isFinite(stamp) || now - stamp * 1000 > FRESH_MS || stamp * 1000 - now > 5000) throw new Error('分轨计划过期或时钟不同步')
   if (!['ready', 'waiting', 'frozen', 'blocked', 'error', 'stopped'].includes(raw.status)) throw new Error('分轨状态无效')
   if (raw.status !== 'ready') return null
+  const stamp = raw.emitted_at_s
+  if (!Number.isFinite(stamp) || now - stamp * 1000 > FRESH_MS || stamp * 1000 - now > 5000) throw new Error('分轨计划过期或时钟不同步')
   validateDemoOrigin(raw)
   const plan = raw.stem_mix
   if (!plan || plan.track_id !== trackId || !TRACKS.includes(trackId) || !['adaptive', 'conservative', 'demo_scripted'].includes(plan.mode)) throw new Error('分轨音乐计划与所选素材不一致')
@@ -128,23 +128,44 @@ export class StemEngine {
   consume(event) {
     if (!this.armed || !event) return
     try {
+      if (this.session && String(event.session_id) !== this.session) throw new Error('脑电会话已改变，请重新开始')
       const plan = validateStemFrame(event, this.trackId)
-      if (event.emitted_at_s * 1000 < this.armedAt - 1000) throw new Error('收到启动前旧计划')
+      if (plan && event.emitted_at_s * 1000 < this.armedAt - 1000) throw new Error('收到启动前旧计划')
       const session = String(event.session_id)
-      if (this.session && session !== this.session) throw new Error('脑电会话已改变，请重新开始')
+      if (['stopped', 'blocked', 'error'].includes(event.status)) { this.stop(event.reason || event.status); return }
       if (event.sequence <= this.sequence) return
       this.session = session; this.sequence = event.sequence; this.source = event.source
       if (!plan) {
+        if (event.source === 'LIVE' && ['waiting', 'frozen'].includes(event.status)) {
+          this.holdLive(); this.publish(); return
+        }
+        this.liveHeld = false
         this.plan = null
-        if (['stopped', 'blocked', 'error'].includes(event.status)) { this.stop(event.reason || event.status); return }
         this.clearSources(); this.applied = null; this.status = 'waiting'; this.reason = event.reason || '等待有效电极'
         this.publish(); return
       }
       if (this.fadeDeadline != null) return
+      this.liveHeld = false
       this.plan = plan; this.lastReady = performance.now(); this.serverStamp = event.emitted_at_s * 1000
       this.log('plan', { sequence: plan.sequence, mode: plan.mode, control_level: plan.control_level, gains: plan.gains })
       this.publish()
-    } catch (e) { this.stop(e.message) }
+    } catch (e) {
+      if (event.source === 'LIVE' && /分轨计划过期或时钟不同步/.test(e.message)) { this.holdLive(); this.publish() }
+      else this.stop(e.message)
+    }
+  }
+  holdLive() {
+    if (this.origin != null && this.ctx.currentTime < this.origin) { this.clearSources(); this.applied = null }
+    if (!this.liveHeld && this.origin != null) {
+      const at = this.ctx.currentTime
+      for (const param of [...this.stems.map(s => s.gain.gain), this.filter.frequency, this.master.gain]) {
+        if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(at)
+        else { const value = param.value; param.cancelScheduledValues(at); param.setValueAtTime(value, at) }
+      }
+    }
+    this.liveHeld = true
+    this.status = this.origin == null ? 'waiting' : 'holding'
+    this.reason = this.origin == null ? '等待新的实时脑电数据；尚未播放' : '等待新的实时脑电数据；保持已播放音乐与上次参数，暂停动态调节'
   }
   ramp(param, value, at, duration) {
     if (param.cancelAndHoldAtTime) param.cancelAndHoldAtTime(at)
@@ -173,9 +194,13 @@ export class StemEngine {
       return
     }
     if (this.plan && (performance.now() - this.lastReady > FRESH_MS || Date.now() - this.serverStamp > FRESH_MS)) {
-      this.ramp(this.master.gain, 0, now, 2); this.fadeDeadline = performance.now() + 2100
-      this.status = 'fading'; this.reason = '计划过期，2秒渐出'; this.publish(); return
+      if (this.source === 'LIVE') this.holdLive()
+      else {
+        this.ramp(this.master.gain, 0, now, 2); this.fadeDeadline = performance.now() + 2100
+        this.status = 'fading'; this.reason = '计划过期，2秒渐出'; this.publish(); return
+      }
     }
+    if (this.liveHeld && this.origin == null) { this.publish(); return }
     if (!this.plan || this.stems.length !== 4 || this.ctx.state !== 'running') return
     if (this.origin == null) {
       this.origin = now + .1; this.scheduleCycle(this.origin)
@@ -183,7 +208,7 @@ export class StemEngine {
     }
     if (this.nextCycle < now - .25) { this.stop('分轨调度延迟，请保持页面前台'); return }
     if (this.nextCycle <= now + .15) this.scheduleCycle(this.nextCycle)
-    if (this.applied?.sequence !== this.plan.sequence || this.appliedRevision !== this.mixRevision) {
+    if (!this.liveHeld && (this.applied?.sequence !== this.plan.sequence || this.appliedRevision !== this.mixRevision)) {
       const mix = effectiveStemMix(this.plan, this.strength, this.bypass)
       for (const stem of this.stems) this.ramp(stem.gain.gain, mix.gains[stem.role], now, this.plan.transition_seconds)
       this.ramp(this.filter.frequency, mix.cutoff, now, this.plan.transition_seconds)
@@ -213,6 +238,7 @@ export class StemEngine {
     this.entries.clear(); this.origin = null; this.nextCycle = null; this.lastUi = null
   }
   stop(reason = '用户停止') {
+    this.liveHeld = false
     this.token++; this.armed = false; clearInterval(this.timer); this.abort?.abort(); this.clearSources()
     if (this.ctx) { this.ctx.onstatechange = null; this.ctx.close().catch(() => {}) }
     this.ctx = null; this.analyser = null; this.waveData = null; this.frequencyData = null; this.stems = []; this.plan = null; this.applied = null; this.fadeDeadline = null

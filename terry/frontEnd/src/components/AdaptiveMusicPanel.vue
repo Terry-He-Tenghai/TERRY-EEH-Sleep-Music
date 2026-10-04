@@ -9,7 +9,7 @@ const props = defineProps({ event: { type: Object, default: null }, disabled: { 
 const scripted = computed(() => props.event?.demo_scripted === true)
 const playback = shallowRef({ armed: false, status: 'unarmed', reason: '启动 EEG 采集时授权声音；无需手动编辑 MIDI', activeNotes: [], beat: 0, phrase: 0, logCount: 0 })
 const engine = new AdaptiveEngine({ onUpdate: update => { playback.value = update } })
-const statusLabels = { holding: '短暂电极失效 · 背景保持', fading: '音频渐出中', unarmed: '未授权', waiting: '等待有效计划 / 静音', ready: '已缓冲 / 等待边界', buffering: '本地底轨缓冲中', playing: '浏览器正在播放', frozen: '信号冻结 / 静音', blocked: '播放阻止 / 静音', error: '错误 / 静音', stopped: '已停止' }
+const statusLabels = { holding: '等待新数据 · 音乐保持', fading: '音频渐出中', unarmed: '未授权', waiting: '等待有效计划 / 静音', ready: '已缓冲 / 等待边界', buffering: '本地底轨缓冲中', playing: '浏览器正在播放', frozen: '信号冻结 / 静音', blocked: '播放阻止 / 静音', error: '错误 / 静音', stopped: '已停止' }
 const statusLabel = computed(() => statusLabels[playback.value.status] || playback.value.status)
 const plannedState = computed(() => props.event?.music_state || props.event?.current_music_state || '—')
 const targetState = computed(() => props.event?.target_music_state || '—')
@@ -191,7 +191,7 @@ defineExpose({ arm, stop })
     <section class="upload-volume"><details><summary>MIDI 音量 ×{{ (playback.midiLevel ?? 1).toFixed(1) }}</summary><label class="sr-only" for="midi-level">MIDI 音量</label><input id="midi-level" type="range" min="0" max="2" step="0.1" :value="playback.midiLevel ?? 1" @input="engine.setMidiLevel(Number($event.target.value))" /><p>0 为原曲对照，1 为默认，2 为增强试听；仅调整 MIDI 层。</p></details></section>
     <div class="playback-clock"><span>当前乐句 {{ playback.phrase || '—' }} · 拍位 {{ playback.activeTrack ? playback.beat.toFixed(1) : '—' }}</span><span>下一边界 {{ playback.nextBoundarySeconds == null ? '—' : `${playback.nextBoundarySeconds.toFixed(1)} 秒` }}</span></div>
     <details class="notice compact-notice"><summary>播放说明</summary><p>后端生成 MIDI 计划，浏览器合成并叠加本地背景。底轨切换在乐句边界淡化；兼容性与声压安全未验证。</p></details>
-    <footer><button type="button" :disabled="!playback.armed" @click="stop()">停止声音</button><button type="button" class="secondary" @click="downloadLog">下载日志（{{ playback.logCount }}）</button><details><summary>安全与日志说明</summary><small>页面隐藏、手动停止或其他播放器接管时立即停止。短暂电极失效最多保持背景30秒；无新计划超过15秒后淡出。日志仅记录浏览器调度，不证明扬声器输出。</small></details></footer>
+    <footer><button type="button" :disabled="!playback.armed" @click="stop()">停止声音</button><button type="button" class="secondary" @click="downloadLog">下载日志（{{ playback.logCount }}）</button><details><summary>安全与日志说明</summary><small>页面隐藏、手动停止或其他播放器接管时立即停止。LIVE质量不合格或无新计划超过15秒时保持已播放音乐、冻结参数，等待质量合格的新数据；DEMO仍按原策略处理异常与超时。日志仅记录浏览器调度，不证明扬声器输出。</small></details></footer>
   </section>
 </template>
 

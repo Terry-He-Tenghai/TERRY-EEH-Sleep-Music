@@ -24,6 +24,20 @@ export function canPlayAutomatic(event, now = Date.now()) {
     event.playback_mode === 'adaptive'
 }
 
+// Permission to KEEP already-started music, never permission to start or switch.
+export function canContinueAutomatic(event, playingSession, now = Date.now()) {
+  if (event?.source !== 'LIVE' || playingSession == null ||
+      String(event.session_id) !== String(playingSession) ||
+      !['ready', 'waiting', 'frozen'].includes(event.status)) return false
+  const age = now - event.emitted_at_s * 1000
+  const stale = Number.isFinite(event.emitted_at_s) && age > LIVE_MAX_AGE_MS
+  return stale || ['waiting', 'frozen'].includes(event.status)
+}
+
+export const musicStateLabels = {
+  M1: 'M1 · 清醒安定音乐', M2: 'M2 · 入睡过渡音乐', M3: 'M3 · 浅睡维持音乐',
+}
+
 export const waveformHoldReasons = {
   initializing_waveform_model: '正在加载本地波形模型',
   waveform_model_prediction_failed: '波形模型推理失败，已停止分类和音乐',
@@ -31,8 +45,8 @@ export const waveformHoldReasons = {
   inference_queue_overflow_restart_required: '旧版本分类队列溢出，请停止采集后重启更新的后端',
   collecting_model_window: '正在收集连续 40 秒模型窗口',
   confirming_state_classification: '已有模型分数，等待连续稳定分类确认',
-  invalid_or_low_quality_eeg: '所选模型要求的脑电质量检查未通过，音乐暂停',
-  waiting_for_live_data: '等待设备恢复数据，音乐暂停',
+  invalid_or_low_quality_eeg: '脑电质量未通过；已有音乐继续播放，等待有效分类',
+  waiting_for_live_data: '等待设备恢复数据；已有音乐继续播放，分类驱动更新暂停',
   recollecting_after_packet_gap: '检测到丢包或重复包，正在重新收集连续 40 秒窗口',
   waveform_model_missing: '缺少所选 cap2 / cap4 / cap6 / cap8 / cap16 波形模型',
   waveform_model_contract_mismatch: '波形模型输入约定与当前设备配置不匹配',
@@ -43,7 +57,7 @@ export const waveformHoldReasons = {
 }
 
 export function waveformStatus(event, now = Date.now()) {
-  if (!isFreshLiveEvent(event, now)) return '等待新的实时脑电事件，音乐暂停'
+  if (!isFreshLiveEvent(event, now)) return '等待新的实时脑电事件；已有音乐继续播放，暂停分类驱动更新'
   const reason = event.inference_hold_reason || event.reason
   return waveformHoldReasons[reason] || (event.classification_confirmed ? '分类已确认（研究用途）' : '等待有效稳定分类')
 }

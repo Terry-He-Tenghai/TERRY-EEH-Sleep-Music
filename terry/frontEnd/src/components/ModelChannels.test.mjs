@@ -7,14 +7,29 @@ import { CAP_CHANNELS, MODEL_OPTIONS, modelChannels, plotChannelIndices, quality
 import { liveClassification, waveformStatus, waveformCollection } from '../audio/liveClassification.js'
 
 const app = readFileSync(new URL('../App.vue', import.meta.url), 'utf8')
-function appHarness() {
+function appHarness(overrides = {}) {
   const script = parse(app).descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/import\.meta\.env\.\w+/g, "''")
   const bindings = { ref, computed, watch, nextTick, onMounted() {}, onBeforeUnmount() {},
     CAP_CHANNELS, MODEL_OPTIONS, plotChannelIndices, qualityChannels, classifyLive: liveClassification,
     waveformStatus, waveformCollection, location: { protocol: 'http:', host: 'localhost' },
-    window: { devicePixelRatio: 1 } }
-  return new Function(...Object.keys(bindings), `${script}\nreturn { mode, classificationChannels, showAllChannels, plotIndices, plottedChannels, signal, canvas, enabledCount, appendSamples, channelsMatch, waveformError, draw, toggleAll }`)(...Object.values(bindings))
+    window: { devicePixelRatio: 1 }, ...overrides }
+  return new Function(...Object.keys(bindings), `${script}\nreturn { mode, classificationChannels, showAllChannels, plotIndices, plottedChannels, signal, canvas, enabledCount, appendSamples, channelsMatch, waveformError, draw, toggleAll, connectSocket, stopAcquisition, adaptivePanel, ws }`)(...Object.values(bindings))
 }
+
+test('LIVE WebSocket loss keeps music while explicit acquisition stop always stops', async () => {
+  class Socket { static OPEN = 1; readyState = 0 }
+  const stops = []
+  const h = appHarness({ WebSocket: Socket, fetch: async () => ({ ok: true,
+    json: async () => ({ streaming: false, connected: false, sample_rate_hz: 250 }) }) })
+  h.adaptivePanel.value = { stop: reason => stops.push(reason) }
+  h.mode.value = 'brainflow'; await nextTick()
+  h.connectSocket()
+  h.ws.value.onerror()
+  h.ws.value.onclose()
+  assert.deepEqual(stops, [])
+  await h.stopAcquisition()
+  assert.deepEqual(stops, ['user-stopped-acquisition'])
+})
 
 test('all five model options retain exact electrode order and CAP16 data indices', () => {
   const expected = [[2, ['Fp1', 'Fp2'], [0, 1]], [4, ['Fp1', 'Fp2', 'F3', 'F4'], [0, 1, 10, 11]],
