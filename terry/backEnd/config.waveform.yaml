@@ -3,6 +3,7 @@
 enabled: true
 model_root: ../results/waveform_cap_v1
 subset_model_root: ../results/waveform_subset_v1
+frontal_model_root: ../results/waveform_frontal_v1
 # Consecutive overlapping 30s predictions, 6s apart: debounce, not independent evidence.
 confirmations_required: 2
 minimum_stage_probability: 0.55

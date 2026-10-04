@@ -1,9 +1,9 @@
 // CAP16 acquisition order. Model selection never changes the acquisition buffer.
 export const CAP_CHANNELS = Object.freeze(['Fp1', 'Fp2', 'C3', 'C4', 'P7', 'P8', 'O1', 'O2', 'F7', 'F8', 'F3', 'F4', 'T7', 'T8', 'P3', 'P4'])
 export const MODEL_OPTIONS = Object.freeze([
-  { count: 2, channels: ['C3', 'C4'] },
-  { count: 4, channels: ['Fp1', 'Fp2', 'C3', 'C4'] },
-  { count: 6, channels: ['Fp1', 'Fp2', 'C3', 'C4', 'F3', 'F4'] },
+  { count: 2, channels: ['Fp1', 'Fp2'] },
+  { count: 4, channels: ['Fp1', 'Fp2', 'F3', 'F4'] },
+  { count: 6, channels: ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8'] },
   { count: 8, channels: CAP_CHANNELS.slice(0, 8) },
   { count: 16, channels: [...CAP_CHANNELS] },
 ])
@@ -32,6 +32,9 @@ const reasonLabels = {
   flatline: '平直信号', flat_signal: '平直信号', constant_signal: '恒定信号',
   excessive_amplitude: '幅度过大', amplitude_out_of_range: '幅度超出范围',
   clipping: '信号削顶', saturation: '信号饱和', high_noise: '噪声过大',
+  recollecting_after_inference_backlog: '分类处理积压后重新收集窗口',
+  collecting_model_window: '正常收集模型窗口',
+  nonfinite: '包含非有限数值', high_amplitude: '滤波后幅度过大', low_variation: '信号变化过低',
   packet_gap: '采集数据间断', duplicate_packet: '重复数据包',
   recollecting_after_packet_gap: '丢包或重复包后重新收集窗口',
   waiting_for_live_data: '等待设备恢复数据', insufficient_samples: '采样数量不足',

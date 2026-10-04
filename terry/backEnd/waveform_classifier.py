@@ -51,13 +51,30 @@ def subset_training_code():
     return module
 
 
+@lru_cache(maxsize=1)
+def frontal_training_code():
+    path = Path(__file__).resolve().parents[1] / 'script' / 'train_sleep_frontal_models.py'
+    spec = importlib.util.spec_from_file_location('terry_frontal_training_contract', path)
+    if spec is None or spec.loader is None:
+        raise WaveformModelError('waveform_model_contract_mismatch')
+    module = importlib.util.module_from_spec(spec)
+    import sys
+    directory = str(path.parent)
+    sys.path.insert(0, directory)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(directory)
+    return module
+
+
 def load_settings():
     try:
         path = Path(__file__).with_name("config.waveform.yaml")
         settings = yaml.safe_load(path.read_text(encoding="utf-8"))
         if not isinstance(settings, dict) or settings.get("enabled") is not True:
             raise ValueError("waveform research inference must be explicitly enabled")
-        for key in ('model_root', 'subset_model_root'):
+        for key in ('model_root', 'subset_model_root', 'frontal_model_root'):
             if key not in settings:
                 continue
             root = Path(settings[key])
@@ -82,16 +99,16 @@ class WaveformClassifier:
         if count not in (2, 4, 6, 8, 16) or rate != legacy.RATE:
             raise WaveformModelError("waveform_model_contract_mismatch")
         self.subset = count in (2, 4, 6)
-        self.contract = subset_training_code() if self.subset else legacy
+        self.contract = frontal_training_code() if self.subset else legacy
         self.selected_channels = tuple(self.contract.MONTAGES[count]) if self.subset else legacy.CAP16[:count]
         self.quality_channels = self.selected_channels if self.subset else legacy.CAP16
         self.indices = [legacy.CAP16.index(name) for name in self.quality_channels]
         self.pipeline = self.contract.pipeline_for(count) if self.subset else legacy.PIPELINE
-        self.architecture = 'build_model:cap-waveform-subset-v1' if self.subset else 'build_model:cap-waveform-v1'
+        self.architecture = 'build_model:cap-waveform-frontal-v1' if self.subset else 'build_model:cap-waveform-v1'
         self.model = None
         self.predictor = predictor
         if predictor is None:
-            key = 'subset_model_root' if self.subset else 'model_root'
+            key = 'frontal_model_root' if self.subset else 'model_root'
             root = model_root if model_root is not None else load_settings().get(key)
             if root is None:
                 raise WaveformModelError('waveform_model_configuration_error')

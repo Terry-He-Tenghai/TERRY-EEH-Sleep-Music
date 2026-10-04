@@ -11,7 +11,7 @@ import torch
 from scipy.signal import resample_poly
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'backEnd'))
-from waveform_classifier import WaveformClassifier, subset_training_code, training_code
+from waveform_classifier import WaveformClassifier, frontal_training_code, training_code
 
 
 def main():
@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
     if args.windows < 1:
         parser.error('windows must be positive')
-    base, code = training_code(), subset_training_code()
+    base, code = training_code(), frontal_training_code()
     header = base.header_info(args.edf)
     selected = code.channel_selection(header, 6)
     raw = mne.io.read_raw_edf(args.edf, include=selected, preload=False, verbose='ERROR')

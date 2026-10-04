@@ -17,8 +17,8 @@ function appHarness() {
 }
 
 test('all five model options retain exact electrode order and CAP16 data indices', () => {
-  const expected = [[2, ['C3', 'C4'], [2, 3]], [4, ['Fp1', 'Fp2', 'C3', 'C4'], [0, 1, 2, 3]],
-    [6, ['Fp1', 'Fp2', 'C3', 'C4', 'F3', 'F4'], [0, 1, 2, 3, 10, 11]],
+  const expected = [[2, ['Fp1', 'Fp2'], [0, 1]], [4, ['Fp1', 'Fp2', 'F3', 'F4'], [0, 1, 10, 11]],
+    [6, ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8'], [0, 1, 10, 11, 8, 9]],
     [8, CAP_CHANNELS.slice(0, 8), Array.from({ length: 8 }, (_, i) => i)],
     [16, [...CAP_CHANNELS], Array.from({ length: 16 }, (_, i) => i)]]
   assert.deepEqual(MODEL_OPTIONS.map(option => option.count), [2, 4, 6, 8, 16])
@@ -64,9 +64,9 @@ test('App draws selected names from original indices, while visible toggles only
   const context = { setTransform() {}, fillRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() { colors.push(this.strokeStyle) }, fillText(text) { labels.push(text) } }
   h.canvas.value = { width: 0, height: 0, getBoundingClientRect: () => ({ width: 600, height: 500 }), getContext: () => context }
   h.appendSamples({ channels: [...CAP_CHANNELS], sample_rate_hz: 250, timestamp_s: 0, samples_uv: CAP_CHANNELS.map((_, i) => [i, i + 2]) })
-  assert.deepEqual(labels.slice(0, 6), ['Fp1', 'Fp2', 'C3', 'C4', 'F3', 'F4'])
-  assert.deepEqual(colors.slice(-6), ['#27708b', '#a35b25', '#867017', '#7954a3', '#a94747', '#8159a0'])
-  assert.deepEqual(h.plottedChannels.value.slice(-2), [{ name: 'F3', index: 10 }, { name: 'F4', index: 11 }])
+  assert.deepEqual(labels.slice(0, 6), ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8'])
+  assert.deepEqual(colors.slice(-6), ['#27708b', '#a35b25', '#a94747', '#8159a0', '#9d631c', '#247866'])
+  assert.deepEqual(h.plottedChannels.value.slice(-2), [{ name: 'F7', index: 8 }, { name: 'F8', index: 9 }])
   h.toggleAll({ target: { checked: false } })
   assert.equal(h.enabledCount.value, 0)
   h.showAllChannels.value = true

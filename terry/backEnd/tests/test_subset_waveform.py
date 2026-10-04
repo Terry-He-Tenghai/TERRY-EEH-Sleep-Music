@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from channel_mapping import CAP_ORDER
-from waveform_classifier import WaveformClassifier, subset_training_code
+from waveform_classifier import WaveformClassifier, frontal_training_code
 
 
 def signal():
@@ -13,7 +13,7 @@ def signal():
 
 @pytest.mark.parametrize('count', [2, 4, 6])
 def test_unselected_bad_channels_do_not_block_selected_model(count):
-    code = subset_training_code()
+    code = frontal_training_code()
     model = WaveformClassifier(CAP_ORDER, 250, count, predictor=lambda _: [.7, .2, .1])
     raw = signal()
     for index, name in enumerate(CAP_ORDER):
@@ -42,7 +42,7 @@ def test_selected_bad_channel_is_reported_and_never_classified(count, bad, reaso
 @pytest.mark.parametrize('count', [2, 4, 6])
 def test_selected_index_mapping_matches_training_preprocessing(count):
     seen = []
-    code = subset_training_code()
+    code = frontal_training_code()
     model = WaveformClassifier(CAP_ORDER, 250, count, predictor=lambda x: seen.append(x.copy()) or [.7, .2, .1])
     data = signal()
     assert model.update(data, 40)['status'] == 'ready'
@@ -50,6 +50,19 @@ def test_selected_index_mapping_matches_training_preprocessing(count):
     filtered, reason = code.preprocess_window(selected, 250, count)
     assert reason is None
     np.testing.assert_array_equal(seen[0], code.model_input(filtered, count))
+
+
+def test_old_central_checkpoint_cannot_be_loaded_as_frontal(tmp_path):
+    import torch
+    from waveform_classifier import WaveformModelError, subset_training_code
+    old = subset_training_code()
+    path = tmp_path / 'cap2'
+    path.mkdir()
+    torch.save({'architecture': 'build_model:cap-waveform-subset-v1',
+                'channels': list(old.MONTAGES[2]), 'classes': ['W', 'N1', 'N2'],
+                'pipeline': old.pipeline_for(2)}, path / 'best.pt')
+    with pytest.raises(WaveformModelError, match='waveform_model_contract_mismatch'):
+        WaveformClassifier(CAP_ORDER, 250, 2, model_root=tmp_path)
 
 
 @pytest.mark.parametrize('count', [2, 4, 6])

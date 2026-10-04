@@ -27,6 +27,8 @@ export function canPlayAutomatic(event, now = Date.now()) {
 export const waveformHoldReasons = {
   initializing_waveform_model: '正在加载本地波形模型',
   waveform_model_prediction_failed: '波形模型推理失败，已停止分类和音乐',
+  recollecting_after_inference_backlog: '分类处理积压，已丢弃旧数据并重新收集窗口',
+  inference_queue_overflow_restart_required: '旧版本分类队列溢出，请停止采集后重启更新的后端',
   collecting_model_window: '正在收集连续 40 秒模型窗口',
   confirming_state_classification: '已有模型分数，等待连续稳定分类确认',
   invalid_or_low_quality_eeg: '所选模型要求的脑电质量检查未通过，音乐暂停',

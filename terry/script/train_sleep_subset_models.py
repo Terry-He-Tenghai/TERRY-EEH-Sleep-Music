@@ -257,7 +257,7 @@ def train_one(args, count, split, fingerprint):
         if score > best_score:
             best_score, best_epoch = score, epoch
             checkpoint = {"state_dict": {k:v.detach().cpu() for k,v in model.state_dict().items()},
-                          "architecture": "build_model:cap-waveform-subset-v1", "channels": list(MONTAGES[count]),
+                          "architecture": "build_model:" + pipeline_for(count)["version"], "channels": list(MONTAGES[count]),
                           "pipeline": pipeline_for(count), "classes": list(STAGES), "split": split,
                           "epoch": epoch, "settings": settings, "deployment_ready": False}
             temporary = directory / "best.pt.tmp"

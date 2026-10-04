@@ -46,6 +46,7 @@ class _Session:
     cancelled: threading.Event = field(default_factory=threading.Event)
     started_at: float = field(default_factory=time.monotonic)
     last_received: float | None = None
+    live_queue_reset: bool = False
 
 
 class AdaptiveWebService:
@@ -128,6 +129,8 @@ class AdaptiveWebService:
         with self._lock:
             if ctx is not self._session or (ctx.cancelled.is_set() and not terminal):
                 return
+            if ctx.source == 'LIVE' and ctx.live_queue_reset and fields.get('classification_confirmed') is True:
+                return  # Never publish an in-flight prediction after overflow.
             previous_status = (self._last.get("status"), self._last.get("reason"))
             self._sequence += 1
             self._last = {**self._last, "plan_updated": False, **fields,
@@ -166,12 +169,31 @@ class AdaptiveWebService:
                 self._fail(ctx, "frozen", "acquisition_gap_restart_required")
                 return
             ctx.last_received = received
+            item = (np.array(samples_uv, dtype=float, copy=True), start_sample, rate,
+                    None if timestamps_s is None else np.array(timestamps_s, dtype=float, copy=True), received,
+                    None if package_ids is None else np.array(package_ids, dtype=float, copy=True))
             try:
-                ctx.chunks.put_nowait((np.array(samples_uv, dtype=float, copy=True), start_sample, rate,
-                                       None if timestamps_s is None else np.array(timestamps_s, dtype=float, copy=True), received,
-                                       None if package_ids is None else np.array(package_ids, dtype=float, copy=True)))
+                ctx.chunks.put_nowait(item)
             except queue.Full:
-                self._fail(ctx, "blocked", "inference_queue_overflow_restart_required")
+                if ctx.source != 'LIVE':
+                    self._fail(ctx, "blocked", "inference_queue_overflow_restart_required")
+                    return
+                # A cold model import/load may exceed the 32 small-packet queue.
+                # Discard old EEG instead of increasing latency or splicing gaps.
+                while True:
+                    try:
+                        ctx.chunks.get_nowait()
+                    except queue.Empty:
+                        break
+                ctx.live_queue_reset = True
+                ctx.chunks.put_nowait(item)
+                info = {**(self._last.get('waveform_model') or {}), 'collected_seconds': 0,
+                        'reset_reason': 'recollecting_after_inference_backlog'}
+                self._emit(ctx, status='frozen', reason='recollecting_after_inference_backlog',
+                           waveform_model=info, state=None, probabilities=None,
+                           classification_confirmed=False, signal_quality=0., playback_mode='silent',
+                           inference_hold_reason='recollecting_after_inference_backlog', notes=[],
+                           selected_track=None, current_music_state=None, target_music_state=None)
 
     @staticmethod
     def _track(state: str, ctx: _Session | None = None) -> tuple[dict[str, str] | None, str]:
@@ -358,7 +380,7 @@ class AdaptiveWebService:
         try:
             settings = load_settings()
             classifier = WaveformClassifier(ctx.channels, ctx.rate, ctx.classification_channels,
-                                            model_root=settings.get('subset_model_root' if ctx.classification_channels in (2, 4, 6) else 'model_root'))
+                                            model_root=settings.get('frontal_model_root' if ctx.classification_channels in (2, 4, 6) else 'model_root'))
         except WaveformModelError as exc:
             self._fail(ctx, 'blocked', exc.reason)
             return
@@ -406,6 +428,25 @@ class AdaptiveWebService:
                 continue
             if ctx.cancelled.is_set():
                 return
+            with self._lock:
+                if ctx.live_queue_reset:
+                    # The fetched item may predate the concurrent overflow. Use
+                    # only queued post-reset data, atomically with submit().
+                    try:
+                        samples, start, rate, timestamps, received, package_ids = ctx.chunks.get_nowait()
+                    except queue.Empty:
+                        # If get() already fetched the new first item, it is safe
+                        # to use it: no queued older data survived the reset.
+                        pass
+                    ctx.live_queue_reset = False
+                    classifier.reset()
+                    pending = np.empty((16, 0))
+                    previous_timestamp = previous_package = None
+                    timestamp_offsets = np.empty(0)
+                    expected_sample = start
+                    scheduler, modulator = new_scheduler(), EegMusicModulator()
+                    last_stage, stage_count = None, 0
+                    hold('recollecting_after_inference_backlog', start / ctx.rate)
             if (time.monotonic() - received > 3 or rate != 250 or start != expected_sample
                     or samples.ndim != 2 or samples.shape[0] != 16):
                 self._fail(ctx, 'blocked', 'sample_discontinuity_restart_required')
@@ -455,6 +496,9 @@ class AdaptiveWebService:
                     logger.exception('Waveform model prediction failed; no heuristic fallback')
                     self._fail(ctx, 'error', 'waveform_model_prediction_failed')
                     return
+                # An overflow during inference invalidates its in-flight result.
+                if ctx.live_queue_reset:
+                    break
                 # Model completion is not a new EEG receipt; discard stale results.
                 if time.monotonic() - received > 3 or (ctx.last_received is not None and time.monotonic() - ctx.last_received > 2):
                     classifier.reset()
