@@ -1,4 +1,5 @@
 import { effectiveStemMix, sampleAudio } from './stemMix.js'
+import { recordOutput, logEvidence } from './sessionEvidence.js'
 import { isScriptedDemo, validateDemoOrigin } from './demoOrigin.js'
 // Original, aligned WAV stems only. No MIDI overlay, tempo conversion or inference here.
 const API = (import.meta.env?.VITE_API_BASE || '').replace(/\/$/, '')
@@ -49,6 +50,7 @@ export class StemEngine {
     document.addEventListener('visibilitychange', this.visibility)
   }
   log(type, fields = {}) {
+    logEvidence(type, { engine: 'stems', audio_time_s: this.ctx?.currentTime ?? null, ...fields })
     this.events.push({ type, time: new Date().toISOString(), audio_time_s: this.ctx?.currentTime ?? null, ...fields })
     if (this.events.length > 1000) this.events.shift()
   }
@@ -79,6 +81,7 @@ export class StemEngine {
       this.analyser.minDecibels = -85; this.analyser.maxDecibels = -15
       this.waveData = new Float32Array(this.analyser.fftSize); this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount)
       this.compressor.connect(this.master); this.master.connect(this.analyser); this.analyser.connect(ctx.destination)
+      recordOutput(ctx, this.master, 'stems')
       this.filter = ctx.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.Q.value = .5
       this.filter.frequency.value = 6000; this.filter.connect(this.compressor)
       this.trackId = track.id; this.track = track; this.stems = []; this.session = null; this.sequence = -1

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -168,6 +169,11 @@ class WaveformClassifier:
                     filtered = sosfilt(sos, values)[-30 * self.rate:]
                     item['filtered_ptp_uv'] = float(np.ptp(filtered))
                     item['filtered_std_uv'] = float(filtered.std())
+                    if item['filtered_ptp_uv'] > 500:
+                        per_second = np.ptp(filtered.reshape(30, self.rate), axis=1)
+                        item['largest_second_ptp_uv'] = float(per_second.max())
+                        item['largest_second_from_end'] = int(30 - per_second.argmax())
+                        item['seconds_over_500uv'] = int(np.count_nonzero(per_second > 500))
                     if item['reason'] is None:
                         if item['filtered_ptp_uv'] > 500:
                             item['reason'] = 'high_amplitude'
@@ -186,6 +192,7 @@ class WaveformClassifier:
                          'buffer_retained': retain, 'quality_details': details}}
 
     def update(self, samples_uv, end_s):
+        started = time.perf_counter()
         samples = np.asarray(samples_uv, dtype=float)
         if samples.ndim != 2 or samples.shape[0] != 16 or samples.shape[1] == 0 or not math.isfinite(end_s):
             raise ValueError("invalid waveform chunk")
@@ -214,5 +221,13 @@ class WaveformClassifier:
                 or abs(probabilities.sum() - 1) > 1e-5):
             raise ValueError("invalid model probabilities")
         stage = self.contract.STAGES[int(probabilities.argmax())]
+        from scipy.signal import welch
+        frequencies, density = welch(self.buffer, fs=self.rate, nperseg=self.rate * 4, axis=1)
+        power = {name: np.trapezoid(density[:, (frequencies >= low) & (frequencies < high)],
+                                   frequencies[(frequencies >= low) & (frequencies < high)], axis=1).tolist()
+                 for name, low, high in [('alpha', 8, 13), ('theta', 4, 8), ('beta', 13, 30)]}
         return {"status": "ready", "probabilities": dict(zip(self.contract.STAGES, probabilities.tolist())),
+                "classification_ms": (time.perf_counter() - started) * 1000,
+                "band_power_uv2": {'channels': list(self.quality_channels), 'values': power,
+                                   'scope': 'quality-qualified raw 40-second window; Welch absolute uV^2'},
                 "info": {**self.info(), "stage": stage, "prediction_end_s": float(end_s)}}

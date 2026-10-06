@@ -38,6 +38,11 @@ test('confirmation scores display while automatic playback remains blocked', () 
   }
   assert.equal(canPlayAutomatic({ source: 'DEMO', status: 'ready', session_id: 'demo' }, now), true)
   assert.equal(canPlayAutomatic({ source: 'DEMO', status: 'ready', session_id: 'demo', demo_scripted: true }, now), false)
+  const scripted = { source: 'DEMO', status: 'ready', session_id: 'demo', demo_scripted: true,
+    inference_mode: 'demo_scripted', probability_origin: 'scripted_not_model',
+    playback_mode: 'demo_scripted', state: { status: 'demo_scripted' } }
+  assert.equal(canPlayAutomatic(scripted, now), true)
+  assert.equal(canPlayAutomatic({ ...scripted, source: 'LIVE' }, now), false)
 })
 
 test('model warmup and all new hold reasons have explicit labels', () => {
@@ -80,7 +85,7 @@ function harness(fetcher, decode = async () => ({})) {
     decodeAudioData(data) { return decode(data) }
   }
   const props = reactive({ event: ready() })
-  const script = parse(panel).descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace('import.meta.env.VITE_API_BASE', "''")
+  const script = 'const recordOutput = () => {}, logEvidence = () => {};\n' + parse(panel).descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace('import.meta.env.VITE_API_BASE', "''")
   // Execute the actual script-setup functions with mocked browser/audio/timer APIs.
   const names = ['ref', 'computed', 'watch', 'onBeforeUnmount', 'defineProps', 'defineExpose', 'window', 'fetch',
     'setInterval', 'clearInterval', 'Date', 'canPlayAutomatic', 'canContinueAutomatic', 'liveClassification', 'musicStateLabels', 'waveformCollection', 'waveformHoldReasons', 'waveformStatus']
@@ -159,6 +164,34 @@ test('quality rejection keeps existing ACE music and never fetches a replacement
     assert.equal(calls, 2)
     h.stop()
     assert.equal(h.nodes[0].stopped, true)
+  } finally { h.cleanup() }
+})
+
+test('paused backend generation status does not silence already looping ACE audio', async () => {
+  let calls = 0
+  const h = harness(async () => {
+    ++calls
+    return calls === 1 ? statusResponse : calls === 2 ? audioResponse : {
+      ok: true, json: async () => ({ status: 'paused', session_id: '1', audio_url: null }) }
+  })
+  try {
+    await h.arm(); await settle()
+    await h.tick(); await settle()
+    assert.equal(calls, 3)
+    assert.notEqual(h.nodes[0].stopped, true)
+  } finally { h.cleanup() }
+})
+
+test('two-N2 sleep pause event immediately silences looping ACE audio', async () => {
+  let calls = 0
+  const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse)
+  try {
+    await h.arm(); await settle()
+    assert.equal(h.nodes[0].started, true)
+    h.props.event = { ...ready(), ace_sleep_paused: true }
+    assert.equal(h.nodes[0].stopped, true)
+    await h.tick()
+    assert.equal(calls, 2, 'sleep pause cannot authorize another audio request')
   } finally { h.cleanup() }
 })
 

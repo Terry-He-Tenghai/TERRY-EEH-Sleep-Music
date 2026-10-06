@@ -521,7 +521,8 @@ class AdaptiveWebService:
                 else:
                     stage_count = stage_count + 1 if stage == last_stage else 1
                     last_stage = stage
-                confirmed = stage_count >= settings['confirmations_required']
+                confirmed = (probabilities[stage] >= float(settings['minimum_stage_probability'])
+                             and (ctx.music_source == 'ace' or stage_count >= settings['confirmations_required']))
                 state = StateUpdate(session_id=str(ctx.generation), window_end_s=end_s,
                                     signal_quality=1.0, status='ok', baseline_ready=False,
                                     n2_within_5m_probability=None, aasm_state_probabilities=probabilities,
@@ -531,6 +532,7 @@ class AdaptiveWebService:
                           'selected_channels': selected, 'valid_fraction': 1.0, 'imputed_channels': [],
                           'quality_scope': classifier.info()['quality_scope'], 'window_end_s': end_s}
                 fields = dict(timestamp_s=end_s, probabilities=probabilities,
+                              classification_ms=result.get('classification_ms'), band_power_uv2=result.get('band_power_uv2'),
                               waveform_model=result['info'], classification_confirmed=confirmed,
                               state={'status': 'ok', 'baseline_ready': False, 'window_end_s': end_s,
                                      'n2_within_5m_probability': None}, signal_quality=1.0,
@@ -541,7 +543,11 @@ class AdaptiveWebService:
                                notes=[], selected_track=None, current_music_state=None, target_music_state=None)
                     continue
                 frame = scheduler.update(state)
-                music_state = frame.music_state.value
+                # ACE is a discrete generated track, not the continuous MIDI
+                # scheduler. Use the quality-approved model stage directly;
+                # AutomaticMusic keeps the old track until the new one is ready.
+                music_state = ({'W': 'M1', 'N1': 'M2', 'N2': 'M3'}[stage]
+                               if ctx.music_source == 'ace' else frame.music_state.value)
                 notes, gains, waveform, modulation = modulator.apply(state, music_state, 42)
                 track, track_status = self._track(music_state, ctx) if ctx.music_source != 'ace' else (None, 'ace_generation')
                 playable = bool(track) or ctx.music_source == 'ace'

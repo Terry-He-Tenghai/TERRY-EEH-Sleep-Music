@@ -72,6 +72,21 @@ def test_finite_bad_window_rolls_forward_without_restarting_40_seconds(count):
     assert result['info']['collected_seconds'] == 40
 
 
+def test_high_amplitude_diagnostics_do_not_approve_noisy_frontal_channel():
+    model = WaveformClassifier(CAP_ORDER, 250, 2, predictor=lambda _: pytest.fail('Noisy EEG classified'))
+    raw = signal()
+    raw[CAP_ORDER.index('Fp1'), -2500:] += 400 * np.sin(2 * np.pi * 2 * np.arange(2500) / 250)
+    result = model.update(raw, 40)
+    assert result['status'] == 'invalid'
+    assert result['info']['quality_reason'] == 'high_amplitude'
+    fp1 = next(item for item in result['info']['quality_details'] if item['channel'] == 'Fp1')
+    assert fp1['filtered_ptp_uv'] > 500
+    assert fp1['largest_second_ptp_uv'] > 500
+    assert 1 <= fp1['largest_second_from_end'] <= 10
+    assert fp1['seconds_over_500uv'] > 0
+    assert result['info']['buffer_retained'] is True
+
+
 def test_old_central_checkpoint_cannot_be_loaded_as_frontal(tmp_path):
     import torch
     from waveform_classifier import WaveformModelError, subset_training_code

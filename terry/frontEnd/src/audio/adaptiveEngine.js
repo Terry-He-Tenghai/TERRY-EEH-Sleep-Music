@@ -1,5 +1,6 @@
 import { isScriptedDemo, validateDemoOrigin } from './demoOrigin.js'
 import { analyzeUpload } from './uploadLoudness.js'
+import { recordOutput, logEvidence } from './sessionEvidence.js'
 
 // Prepared backend MIDI plans only. 60 BPM, 16 beats per phrase; no remote generation.
 const PHRASE = 16, STALE_MS = 15_000, MAX_BYTES = 80_000_000
@@ -112,6 +113,7 @@ export class AdaptiveEngine {
     this.log('midi-level', { multiplier: this.midiLevel }); this.publish()
   }
   log(type, data = {}) {
+    logEvidence(type, { engine: 'adaptive', session_id: this.session, audio_time_s: this.ctx?.currentTime ?? null, ...data })
     this.events.push({ at: new Date().toISOString(), audio_time_s: this.ctx?.currentTime ?? null, type, ...data })
     if (this.events.length > 2000) this.events.splice(0, this.events.length - 2000)
   }
@@ -143,6 +145,7 @@ export class AdaptiveEngine {
       compressor.attack.value = .003; compressor.release.value = .25
       this.compressor = compressor
       compressor.connect(this.master); this.master.connect(context.destination)
+      recordOutput(context, this.master, 'adaptive')
       this.filter = context.createBiquadFilter(); this.filter.type = 'lowpass'; this.filter.frequency.value = 4000
       this.filter.connect(compressor)
       this.delay = context.createDelay(1); this.delay.delayTime.value = .18

@@ -18,7 +18,10 @@ export function liveClassification(event, running, now = Date.now()) {
 }
 
 export function canPlayAutomatic(event, now = Date.now()) {
-  if (!event?.session_id || event.status !== 'ready' || event.demo_scripted) return false
+  if (!event?.session_id || event.status !== 'ready') return false
+  if (event.demo_scripted) return event.source === 'DEMO' && event.inference_mode === 'demo_scripted' &&
+    event.probability_origin === 'scripted_not_model' && event.playback_mode === 'demo_scripted' &&
+    event.state?.status === 'demo_scripted'
   if (event.source !== 'LIVE') return true // Preserve the existing DEMO model pathway.
   return !!liveClassification(event, true, now) && event.classification_confirmed === true &&
     event.playback_mode === 'adaptive'
@@ -44,7 +47,7 @@ export const waveformHoldReasons = {
   recollecting_after_inference_backlog: '分类处理积压，已丢弃旧数据并重新收集窗口',
   inference_queue_overflow_restart_required: '旧版本分类队列溢出，请停止采集后重启更新的后端',
   collecting_model_window: '正在收集连续 40 秒模型窗口',
-  confirming_state_classification: '已有模型分数，等待连续稳定分类确认',
+  confirming_state_classification: '已有模型分数，等待达到生成分数门槛',
   invalid_or_low_quality_eeg: '脑电质量未通过；已有音乐继续播放，等待有效分类',
   waiting_for_live_data: '等待设备恢复数据；已有音乐继续播放，分类驱动更新暂停',
   recollecting_after_packet_gap: '检测到丢包或重复包，正在重新收集连续 40 秒窗口',

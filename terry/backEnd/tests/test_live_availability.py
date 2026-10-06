@@ -16,11 +16,11 @@ def signal(start, seconds=6):
 
 
 def run_windows(monkeypatch, windows, count=8, broken_counter=False, *,
-                missing_at=None, missing_samples=256, timestamp_transform=None):
+                missing_at=None, missing_samples=256, timestamp_transform=None, predictor=None):
     import waveform_classifier
     monkeypatch.setattr(waveform_classifier, 'WaveformClassifier',
                         lambda names, rate, count, **kwargs: WaveformClassifier(
-                            names, rate, count, predictor=lambda x: [.05, .1, .85]))
+                            names, rate, count, predictor=predictor or (lambda x: [.05, .1, .85])))
     ctx = _Session(17, 'LIVE', 250, CAP_ORDER, classification_channels=count, music_source='ace')
     events = []
     def capture(event):
@@ -43,17 +43,25 @@ def run_windows(monkeypatch, windows, count=8, broken_counter=False, *,
             timestamps = timestamp_transform(timestamps)
         service.submit(window, start, 250, 17,
                        timestamps_s=timestamps, package_ids=counters)
+    # Simulated windows are queued all at once, but production receives each
+    # one as it is processed. Allow slow CI filtering without faking the gate.
+    with ctx.chunks.mutex:
+        ctx.chunks.queue = type(ctx.chunks.queue)(
+            (samples, start, rate, timestamps, time.monotonic() + 30, counters)
+            for samples, start, rate, timestamps, _, counters in ctx.chunks.queue)
+    ctx.last_received = time.monotonic() + 30
     service._process(ctx)
     return events
 
 
 @pytest.mark.parametrize('count', [2, 4, 6, 8, 16])
-def test_model_warmup_confirmation_and_cached_ace_audio(monkeypatch, count):
+def test_first_quality_checked_window_can_start_cached_ace_audio(monkeypatch, count):
     events = run_windows(monkeypatch, [signal(i * 1500) for i in range(8)], count)
     assert all(e['probabilities'] is None for e in events if e['timestamp_s'] < 40)
     first = next(e for e in events if e.get('probabilities'))
     assert first['timestamp_s'] == 42
-    assert first['classification_confirmed'] is False
+    assert first['classification_confirmed'] is True
+    assert first['status'] == 'ready'
     event = events[-1]
     assert event['timestamp_s'] == 48
     assert event['status'] == 'ready'
@@ -66,11 +74,21 @@ def test_model_warmup_confirmation_and_cached_ace_audio(monkeypatch, count):
     automatic.start(17, 'ambient')
     automatic.cached['M3'] = '/api/ace/generations/test_audio/audio'
     automatic.consider(first)
-    assert automatic.status()['status'] == 'paused'
-    automatic.consider(event)
     assert automatic.status()['status'] == 'ready'
+    automatic.consider(event)
+    assert automatic.status()['status'] == 'sleep_paused'
+    assert automatic.status()['audio_url'] is None
     automatic.consider({**event, 'status': 'frozen', 'state': None, 'probabilities': None})
-    assert automatic.status()['status'] == 'paused'
+    assert automatic.status()['status'] == 'sleep_paused'
+
+
+def test_ace_music_target_tracks_each_quality_checked_stage_without_scheduler_delay(monkeypatch):
+    predictions = iter(([.85, .1, .05], [.1, .05, .85]))
+    events = run_windows(monkeypatch, [signal(i * 1500) for i in range(8)], count=2,
+                         predictor=lambda _: next(predictions))
+    ready = [event for event in events if event['status'] == 'ready']
+    assert [(event['waveform_model']['stage'], event['target_music_state']) for event in ready] == [
+        ('W', 'M1'), ('N2', 'M3')]
 
 
 @pytest.mark.parametrize('count', [2, 4, 6, 8, 16])
@@ -110,7 +128,7 @@ def test_full_counter_cycle_loss_revokes_ace_until_new_context_and_confirmation(
     assert all(e['probabilities'] is None for e in events if 54 <= e['timestamp_s'] < 96)
     first = next(e for e in events if e['timestamp_s'] >= 54 and e['probabilities'])
     assert first['timestamp_s'] == 96
-    assert first['classification_confirmed'] is False
+    assert first['classification_confirmed'] is True
     assert events[-1]['timestamp_s'] == 102
     assert events[-1]['classification_confirmed'] is True
 
@@ -119,10 +137,10 @@ def test_full_counter_cycle_loss_revokes_ace_until_new_context_and_confirmation(
     automatic.cached['M3'] = '/api/ace/generations/test_audio/audio'
     for event in events:
         automatic.consider(event)
-        if 54 <= event['timestamp_s'] < 102:
-            assert automatic.status()['status'] == 'paused'
+        if 54 <= event['timestamp_s'] < 96:
+            assert automatic.status()['status'] in ('paused', 'sleep_paused')
             assert automatic.status()['audio_url'] is None
-    assert automatic.status()['status'] == 'ready'
+    assert automatic.status()['status'] == 'sleep_paused'
 
 
 @pytest.mark.parametrize('count', [8, 16])

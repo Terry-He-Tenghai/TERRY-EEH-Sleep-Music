@@ -24,6 +24,7 @@ from babyslakh import StemTrackId, get_track as get_stem_track, router as stem_m
 from music_library import router as music_router
 from music_choices import router as music_choices_router, candidates, uploaded
 from music_workbench import router as music_workbench_router
+from session_reports import reports, router as session_reports_router
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -47,6 +48,7 @@ class StartRequest(BaseModel):
     music_style: Literal['all', 'ambient', 'piano', 'nature', 'strings', 'electronic'] = 'all'
     music_source: Literal['stems', 'upload', 'ace'] = 'stems'
     uploaded_track_id: str | None = Field(default=None, pattern=r'^user_[a-f0-9]{32}$')
+    reference_track_id: str | None = Field(default=None, pattern=r'^user_[a-f0-9]{32}$')
     stem_track_id: StemTrackId | None = None
     sample_rate_hz: Literal[250, 500, 1000] = 250
     classification_channels: Literal[2, 4, 6, 8, 16] = 16
@@ -57,6 +59,8 @@ class StartRequest(BaseModel):
             raise ValueError('showcase requires demo mode and 250 Hz synthetic samples')
         if self.uploaded_track_id is not None and self.stem_track_id is not None:
             raise ValueError('uploaded_track_id and stem_track_id are mutually exclusive')
+        if self.reference_track_id and self.music_source != 'ace':
+            raise ValueError('reference audio requires ACE-Step')
         if self.music_source == 'ace' and (self.music_style not in ACE_STYLES or self.uploaded_track_id or self.stem_track_id):
             raise ValueError('ACE-Step requires a preset style and no local track')
         return self
@@ -90,6 +94,7 @@ class AcquisitionStatus:
             "received_seconds": self.received_seconds,
             "staleness": self.staleness,
             "configured_sample_rate_hz": self.sample_rate_hz,
+            "report_id": reports.current['id'] if reports.current else None,
         }
 
 
@@ -140,6 +145,7 @@ class AcquisitionService:
             self._display_filter = DisplayFilter(self._sample_rate_hz, len(self._channels))
             self._powerline_filter = PowerlineNoiseFilter(self._sample_rate_hz, len(self._channels))
             self._stop_event.clear()
+            reports.start(request.model_dump())
             self._status = AcquisitionStatus(
                 connected=request.mode == "demo", streaming=True, mode=request.mode,
                 sample_rate_hz=self._sample_rate_hz, channels=self._channels,
@@ -147,15 +153,16 @@ class AcquisitionService:
             )
             self._adaptive_generation = self._adaptive.start(request.mode, self._sample_rate_hz, self._channels, request.music_style, request.uploaded_track_id, stem_track_id=request.stem_track_id, demo_profile=request.demo_profile, classification_channels=request.classification_channels, music_source=request.music_source)
             if request.music_source == 'ace':
-                ace_automatic.start(self._adaptive_generation, request.music_style)
+                ace_automatic.start(self._adaptive_generation, request.music_style, request.reference_track_id)
             else:
                 ace_automatic.stop()
             self._thread = threading.Thread(target=self._run, args=(request, self._adaptive_generation), name="eeg-acquisition", daemon=True)
             self._thread.start()
             return self._status
 
-    def stop(self) -> AcquisitionStatus:
+    def stop(self, reason: str = 'manual_stop') -> AcquisitionStatus:
         self._stop_event.set()
+        reports.finish(reason, self._status.samples_emitted / self._sample_rate_hz)
         ace_automatic.stop()
         self._adaptive.stop(self._adaptive_generation)
         thread = self._thread
@@ -175,7 +182,17 @@ class AcquisitionService:
 
     def _publish(self, message: dict[str, Any]) -> None:
         if message.get("type") == "adaptive_music":
+            if reports.current:
+                message['report_id'] = reports.current['id']
+            inference_failed = message.get('status') == 'error'
+            if reports.observe(message) or inference_failed:
+                self._stop_event.set()
+                reason = 'inference_error' if inference_failed else 'two_valid_n2'
+                reports.finish(reason, self._status.samples_emitted / self._sample_rate_hz)
+                threading.Thread(target=self.stop, args=(reason,), daemon=True).start()
             ace_automatic.consider(message)
+            if message.get('source') == 'LIVE' and ace_automatic.session == message.get('session_id'):
+                message['ace_sleep_paused'] = ace_automatic.status()['status'] == 'sleep_paused'
         loop = self._loop
         if loop is None:
             return
@@ -203,6 +220,7 @@ class AcquisitionService:
             else:
                 self._run_demo(request)
         except Exception:
+            reports.finish('acquisition_error', self._status.samples_emitted / self._sample_rate_hz)
             self._adaptive.stop(generation, failed=True)
             with self._lock:
                 self._status = AcquisitionStatus(
@@ -213,6 +231,8 @@ class AcquisitionService:
                 )
             self._publish_status()
         finally:
+            reports.finish('manual_stop' if self._stop_event.is_set() else 'unexpected_end',
+                           self._status.samples_emitted / self._sample_rate_hz)
             self._adaptive.stop(generation, failed=not self._stop_event.is_set())
             self._release_board()
             with self._lock:
@@ -338,6 +358,7 @@ app.include_router(music_router)
 app.include_router(music_workbench_router)
 app.include_router(stem_music_router)
 app.include_router(ace_router)
+app.include_router(session_reports_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("TERRY_WEB_ORIGINS", "http://localhost:5173").split(","),
@@ -372,7 +393,8 @@ async def adaptive_status() -> dict[str, Any]:
 
 @app.post("/api/acquisition/start")
 async def start(request: StartRequest) -> dict[str, Any]:
-    if request.uploaded_track_id and uploaded(request.uploaded_track_id) is None:
+    if (request.uploaded_track_id and uploaded(request.uploaded_track_id) is None
+            or request.reference_track_id and uploaded(request.reference_track_id) is None):
         raise HTTPException(422, '上传音频不存在，请重新上传或选择本地风格')
     if request.stem_track_id and get_stem_track(request.stem_track_id) is None:
         raise HTTPException(422, 'Selected BabySlakh track is unavailable')

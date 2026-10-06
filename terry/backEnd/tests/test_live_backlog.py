@@ -52,7 +52,7 @@ def test_live_worker_rebuilds_context_and_confirmations_after_overflow(monkeypat
     assert any(e['reason'] == 'recollecting_after_inference_backlog' for e in events)
     predicted = [e for e in events if e.get('probabilities')]
     assert len(predicted) == 2
-    assert not predicted[0]['classification_confirmed']
+    assert predicted[0]['classification_confirmed']
     assert predicted[1]['classification_confirmed']
     assert predicted[1]['waveform_model']['collected_seconds'] == 40
 

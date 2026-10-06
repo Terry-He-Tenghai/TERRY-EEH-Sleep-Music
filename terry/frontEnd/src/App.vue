@@ -6,6 +6,10 @@ import StemMusicPanel from './components/StemMusicPanel.vue'
 import MusicWorkbench from './components/MusicWorkbench.vue'
 import AceMusicPanel from './components/AceMusicPanel.vue'
 import AutomaticAcePanel from './components/AutomaticAcePanel.vue'
+import AceStemPanel from './components/AceStemPanel.vue'
+import SessionReportPanel from './components/SessionReportPanel.vue'
+import { beginEvidence, bindEvidence, finishEvidence, logEvidence } from './audio/sessionEvidence.js'
+const telemetryLog = logEvidence
 import { liveClassification as classifyLive, waveformStatus, waveformCollection } from './audio/liveClassification.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -15,7 +19,7 @@ const COLORS = ['#27708b', '#a35b25', '#867017', '#7954a3', '#387448', '#376b9f'
 const sampleRate = ref(250), activeSampleRate = ref(250)
 const verticalScale = ref(200)
 const canvas = ref(null), mode = ref('demo'), ipAddress = ref('192.168.4.1'), gain = ref(24)
-const demoProfile = ref('model')
+const demoProfile = ref('showcase')
 const classificationChannels = ref(16)
 const showAllChannels = ref(false)
 const plotIndices = computed(() => plotChannelIndices(displayChannels.value, classificationChannels.value, showAllChannels.value, mode.value === 'brainflow'))
@@ -24,6 +28,7 @@ const running = ref(false), connected = ref(false), paused = ref(false), display
 const waveformError = ref('')
 const samplesEmitted = ref(0), lastTimestamp = ref(0), channelEnabled = ref(CHANNELS.map(() => true))
 const musicSource = ref('ace'), aceStyle = ref('ambient'), uploadedTrack = ref(null), uploading = ref(false), musicChoiceError = ref('')
+const aceUseReference = ref(false)
 const stemTracks = ref([]), stemTrackId = ref('Track00008')
 const selectedStemTrack = computed(() => stemTracks.value.find(t => t.id === stemTrackId.value))
 async function loadStemChoices() {
@@ -37,7 +42,7 @@ async function uploadMusic(event) {
   const file = event.target.files?.[0]
   if (!file || running.value || startingAcquisition.value) return
   musicChoiceError.value = ''; uploadedTrack.value = null
-  if (!file.name.toLowerCase().endsWith('.wav') || file.size > 80000000) { musicChoiceError.value = '请选择不超过80MB的PCM WAV文件'; return }
+  if (!file.name.toLowerCase().endsWith('.wav')) { musicChoiceError.value = '请选择WAV文件'; return }
   uploading.value = true
   try {
     const response = await fetch(`${apiBase}/api/music/uploads`, { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: file })
@@ -56,6 +61,10 @@ function acceptAdaptive(packet) {
   const previous = adaptiveEvent.value
   if (previous && String(previous.session_id) === String(packet.session_id) && previous.sequence >= packet.sequence) return
   adaptiveConnectionError.value = ''
+  if (packet.report_id) bindEvidence(packet.report_id)
+  telemetryLog('eeg-window', { sequence: packet.sequence, eeg_timestamp_s: packet.timestamp_s,
+    server_emitted_at_s: packet.emitted_at_s, classification_confirmed: packet.classification_confirmed })
+  if (['stopped', 'error'].includes(packet.status)) finishEvidence(packet.reason || packet.status)
   adaptiveEvent.value = { ...packet, session_id: String(packet.session_id), eeg_timestamp_s: packet.timestamp_s,
     timestamp_s: packet.emitted_at_s, waveform_parameters: packet.waveform, waveform: 'sine',
     music_state: packet.current_music_state ?? packet.music_state,
@@ -105,6 +114,8 @@ function appendSamples(packet) {
 function channelsMatch(channels) { return Array.isArray(channels) && channels.length === displayChannels.value.length && channels.every((name, index) => name === displayChannels.value[index]) }
 function channelMismatchMessage(channels) { return `波形通道与当前页面不匹配（后端：${Array.isArray(channels) ? channels.join(', ') : '未知'}；页面：${displayChannels.value.join(', ')}）。请停止采集并重启后端，再刷新页面。` }
 function applyStatus(packet) {
+  if (packet.report_id) bindEvidence(packet.report_id)
+  if (running.value && !packet.streaming && !startingAcquisition.value) finishEvidence(packet.error ? 'acquisition_error' : 'backend_ended')
   activeSampleRate.value = packet.sample_rate_hz; running.value = packet.streaming; connected.value = packet.connected; error.value = packet.error || ''
   if (typeof packet.samples_emitted === 'number') samplesEmitted.value = packet.samples_emitted
   if (packet.streaming && !channelsMatch(packet.channels)) waveformError.value = channelMismatchMessage(packet.channels)
@@ -124,35 +135,38 @@ function connectSocket() {
       }
     } catch { error.value = '后端消息格式无效'; adaptivePanel.value?.stop('invalid-stream-message') }
   }
-  socket.onerror = () => { error.value = '无法连接后端 WebSocket'; if (mode.value !== 'brainflow') adaptivePanel.value?.stop('websocket-error') }
-  socket.onclose = () => { ws.value = null; connected.value = false; error.value = 'WebSocket 已断开，波形不再更新，请重新连接'; if (mode.value !== 'brainflow') adaptivePanel.value?.stop('websocket-disconnected') }
+  socket.onerror = () => { error.value = '无法连接后端 WebSocket'; telemetryLog('transport-error'); if (mode.value !== 'brainflow') { finishEvidence('websocket_error'); adaptivePanel.value?.stop('websocket-error') } }
+  socket.onclose = () => { ws.value = null; connected.value = false; error.value = 'WebSocket 已断开，波形不再更新，请重新连接'; telemetryLog('transport-disconnected'); if (mode.value !== 'brainflow') { finishEvidence('websocket_disconnected'); adaptivePanel.value?.stop('websocket-disconnected') } }
 }
 async function startAcquisition() {
   if (startingAcquisition.value || uploading.value) return
-  if (musicSource.value === 'upload' && !uploadedTrack.value) { musicChoiceError.value = '请先上传音频，再开始采集'; return }
+  if ((musicSource.value === 'upload' || (musicSource.value === 'ace' && aceUseReference.value)) && !uploadedTrack.value) { musicChoiceError.value = '请先上传音频，再开始采集'; return }
   if (musicSource.value === 'stems' && !selectedStemTrack.value) { musicChoiceError.value = '请先选择可用分轨素材'; return }
   if (mode.value === 'demo' && demoProfile.value === 'showcase' && sampleRate.value !== 250) { error.value = '动态音乐演示请选择250Hz'; return }
   startingAcquisition.value = true
   acquisitionRequestedAt = Date.now()
+  beginEvidence({ mode: mode.value, demo_profile: demoProfile.value, music_source: musicSource.value })
   adaptiveEvent.value = null
   error.value = ''
   try {
     // Start-click user activation authorizes local audio; no additional MIDI edits.
     adaptivePanel.value?.arm()
     connectSocket(); await nextTick()
-    const response = await fetch(`${apiBase}/api/acquisition/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, demo_profile: mode.value === 'demo' ? demoProfile.value : 'model', classification_channels: classificationChannels.value, ip_address: ipAddress.value, gain: Number(gain.value), sample_rate_hz: Number(sampleRate.value), music_source: musicSource.value, stem_track_id: musicSource.value === 'stems' ? stemTrackId.value : null, music_style: musicSource.value === 'ace' ? aceStyle.value : 'all', uploaded_track_id: musicSource.value === 'upload' ? uploadedTrack.value.id : null }) })
+    const response = await fetch(`${apiBase}/api/acquisition/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode.value, demo_profile: mode.value === 'demo' ? demoProfile.value : 'model', classification_channels: classificationChannels.value, ip_address: ipAddress.value, gain: Number(gain.value), sample_rate_hz: Number(sampleRate.value), music_source: musicSource.value, stem_track_id: musicSource.value === 'stems' ? stemTrackId.value : null, music_style: musicSource.value === 'ace' ? aceStyle.value : 'all', uploaded_track_id: musicSource.value === 'upload' ? uploadedTrack.value.id : null, reference_track_id: musicSource.value === 'ace' && aceUseReference.value ? uploadedTrack.value.id : null }) })
     const body = await response.json(); if (!response.ok) throw new Error(body.detail || '启动采集失败')
     applyStatus(body); signal.value = displayChannels.value.map(() => []); channelEnabled.value = displayChannels.value.map(() => true); lastTimestamp.value = 0; paused.value = false
     if (!body.streaming) adaptivePanel.value?.stop('acquisition-not-started')
-  } catch (err) { error.value = err.message; adaptivePanel.value?.stop('acquisition-start-failed') }
+  } catch (err) { error.value = err.message; await finishEvidence('acquisition_start_failed'); adaptivePanel.value?.stop('acquisition-start-failed') }
   finally { startingAcquisition.value = false }
 }
 async function stopAcquisition() {
+  const saving = finishEvidence('manual_stop')
   adaptivePanel.value?.stop('user-stopped-acquisition')
   try {
     const response = await fetch(`${apiBase}/api/acquisition/stop`, { method: 'POST' })
     if (!response.ok) throw new Error('停止采集失败，请检查后端')
     applyStatus(await response.json())
+    await saving
   } catch (err) { error.value = err.message }
 }
 function togglePause() { paused.value = !paused.value }
@@ -193,26 +207,31 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
         <div class="music-setup__field">
           <label for="music-source">音频来源</label>
           <select id="music-source" v-model="musicSource" aria-describedby="music-source-help"><option value="ace">AI · 脑电分类生成</option><option value="upload">上传我的音频</option><option value="stems">BabySlakh 原曲分轨 · 脑电混音</option></select>
-          <p id="music-source-help" class="music-setup__help">{{ musicSource === 'ace' ? (mode === 'brainflow' ? '先收集40秒原始波形，每6秒推理；分类稳定确认后触发生成，无需个体基线。' : '有效模型分类后，按状态自动生成并播放。') : musicSource === 'stems' ? '20首原曲分轨混音，不叠加 MIDI。' : '使用上传音频作为固定背景。' }}</p>
+          <p id="music-source-help" class="music-setup__help">{{ musicSource === 'ace' ? (mode === 'brainflow' ? '先收集40秒原始波形，每6秒推理；首个质量合格且分数达标的分类即可触发生成。' : demoProfile === 'showcase' ? '演示启动后按预设阶段自动生成；上传音频改写可用作生成素材，无需真实设备。' : '模型验证需等待模拟信号达到分类要求。') : musicSource === 'stems' ? '20首原曲分轨混音，不叠加 MIDI。' : '使用上传音频作为固定背景。' }}</p>
         </div>
         <div v-if="musicSource === 'ace'" class="music-setup__field"><label for="ace-style">预设音乐风格</label><select id="ace-style" v-model="aceStyle"><option value="ambient">氛围</option><option value="piano">钢琴</option><option value="nature">自然</option><option value="strings">弦乐</option><option value="electronic">电子</option></select></div>
+        <div v-if="musicSource === 'ace'" class="music-setup__field">
+          <label for="ace-use-reference"><input id="ace-use-reference" v-model="aceUseReference" type="checkbox" /> 伴奏分离后改写</label>
+          <p class="music-setup__help">将原音频交给 ACE-Step 改写为所选助眠风格，而非直接播放原曲。</p>
+        </div>
         <div v-if="musicSource === 'stems'" class="music-setup__field">
           <label for="stem-track">同步分轨曲目</label>
           <select id="stem-track" v-model="stemTrackId"><option v-for="track in stemTracks" :key="track.id" :value="track.id">{{ track.title || track.id }}</option></select>
           <p class="music-setup__help">四声部同步播放 · 未验证助眠效果</p>
         </div>
-        <div v-else-if="musicSource === 'upload'" class="music-setup__field">
-          <label for="music-upload">上传音频</label>
+        <div v-if="musicSource === 'upload' || (musicSource === 'ace' && aceUseReference)" class="music-setup__field">
+          <label for="music-upload">{{ musicSource === 'ace' ? '改写原音频' : '上传音频' }}</label>
           <input id="music-upload" type="file" accept=".wav,audio/wav" aria-describedby="music-upload-help" @change="uploadMusic" />
-          <p id="music-upload-help" class="music-setup__help">PCM WAV · 8–900 秒 · 单 / 双声道 · 最大 80 MB</p>
+          <p id="music-upload-help" class="music-setup__help">WAV · {{ musicSource === 'ace' ? '改写 10–600' : '最长 900' }} 秒</p>
         </div>
       </fieldset>
-      <div v-if="uploading || (musicSource === 'upload' && uploadedTrack)" class="music-setup__upload-status" role="status" aria-live="polite">
+      <div v-if="uploading || ((musicSource === 'upload' || (musicSource === 'ace' && aceUseReference)) && uploadedTrack)" class="music-setup__upload-status" role="status" aria-live="polite">
         <template v-if="uploading"><strong>正在上传并校验音频…</strong><span>请等待完成后再开始采集。</span></template>
-        <template v-else><strong>已选择：{{ uploadedTrack.displayName }}</strong><span>本次采集保持此背景，MIDI 声部自动变化。</span></template>
+        <template v-else><strong>已选择：{{ uploadedTrack.displayName }}</strong><span>{{ musicSource === 'ace' ? '完整音频发送至远端分离伴奏，再由 ACE-Step 按原始长度改写。' : '本次采集保持此背景，MIDI 声部自动变化。' }}</span></template>
       </div>
+      <AceStemPanel v-if="musicSource === 'ace' && aceUseReference && uploadedTrack" :track-id="uploadedTrack.id" :disabled="running" />
       <footer class="music-setup__footer">
-        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>AI 生成需要有效分类；实时模式使用本地训练的波形CNN，仅供研究、未经本设备验证，预设演示不触发生成。远端处理期间保持等待，断流后暂停分类驱动更新，已开始的音乐继续播放。</li><li>上传音频仅保存在本机，请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
+        <details><summary>音乐使用说明</summary><ul><li>采集中不可更换风格，请先停止采集。</li><li>动态演示按预设阶段触发 AI 生成，不代表脑电分类；真实设备仍需有效模型分类。远端处理期间保持等待，断流后暂停分类驱动更新，已开始的音乐继续播放。</li><li>固定背景音频保存在本机；开启 AI 音频改写后，会将完整原音频发送至远端分离伴奏，再由 ACE-Step 按原始长度改写，支持10–600秒。请确认拥有使用权。</li><li>BabySlakh分轨提供20首原曲的四声部同步混音，仅调整声部比例与亮度，不叠加 MIDI，不修改下载素材。</li></ul></details>
       </footer>
       <p v-if="musicChoiceError" class="error-message" role="alert">{{ musicChoiceError }}</p>
     </section>
@@ -226,7 +245,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
       <strong v-if="demoProfile === 'showcase'" class="demo-label">预设演示 · 非模型预测</strong>
       <span v-else class="music-setup__help">模拟波形 · 真实分类器</span>
       <details class="demo-notes"><summary>演示说明</summary>
-        <p v-if="demoProfile === 'showcase'">清醒→N1→N2→清醒，每段24秒、96秒循环。约3秒产生首个计划，无需300秒基线；分轨约3秒渐变，MIDI在16秒乐句边界应用。仅检验音乐控制，不验证分类准确率。</p>
+        <p v-if="demoProfile === 'showcase'">清醒→N1→N2→清醒，每段24秒、96秒循环。约3秒触发首次 AI 生成或音频改写；分轨约3秒渐变。此为预设阶段，仅检验音乐控制，不验证分类准确率。</p>
         <p v-else>保留真实模型与基线流程。恒定模拟信号不保证类别变化，不会篡改预测结果。</p>
       </details>
     </section>
@@ -265,8 +284,9 @@ onBeforeUnmount(() => { disposed = true; clearInterval(adaptivePoll); clearInter
       <section class="visual-panel"><div class="panel-heading"><div><h2>{{ plotIndices.length }} 通道波形</h2></div><label v-if="mode === 'brainflow'" class="select-all"><input v-model="showAllChannels" type="checkbox" /> 查看全部 16 路</label><label class="select-all"><input type="checkbox" :checked="enabledCount === plotIndices.length" @change="toggleAll" /> 全选显示通道</label></div><div class="canvas-wrap"><canvas ref="canvas" /></div><div class="channel-list"><label v-for="{ name, index } in plottedChannels" :key="name" class="channel-toggle" :style="{ '--channel-color': COLORS[index] }"><input v-model="channelEnabled[index]" type="checkbox" /><span>{{ index + 1 }} {{ name }}</span></label></div></section>
       <p class="notice">显示波形经过 5–50 Hz 级联及 50 Hz 陷波；显示幅度有限制，不代表信号质量合格。</p>
     </details>
-    <details class="workspace-details panel"><summary>采集与播放说明</summary><p>开始采集同时启用音乐计划与本地播放，停止采集同时停止自动音乐。演示模型模式保留原有基线与质量要求；真实设备模式使用40秒波形窗口，无需个体基线，所选模型要求的电极质量合格且分类稳定确认后才允许自动音乐（2 / 4 / 6 路只校验所选，旧 8 / 16 路仍校验全部 16 路）。等待、无效或过期的实时分类会暂停音乐。演示信号不代表真实睡眠状态。</p><p>原始波形支持250/500/1000 Hz，当前模型仅接收250 Hz。真实模式请独占设备连接。研究原型，未验证助眠效果。</p></details>
+    <details class="workspace-details panel"><summary>采集与播放说明</summary><p>开始采集同时启用音乐计划与本地播放，停止采集同时停止自动音乐。演示模型模式保留原有基线与质量要求；真实设备模式使用40秒波形窗口，无需个体基线，首个质量合格且分数达标的分类即可触发生成（2 / 4 / 6 路只校验所选，旧 8 / 16 路仍校验全部 16 路）。质量异常或实时分类过期时不启动新音乐，已有音乐继续播放；停止采集或手动停止仍会停止播放。演示信号不代表真实睡眠状态。</p><p>原始波形支持250/500/1000 Hz，当前模型仅接收250 Hz。真实模式请独占设备连接。研究原型，未验证助眠效果。</p></details>
     <details class="workspace-details panel manual-tools"><summary>高级工具 · MIDI实验台</summary><MusicWorkbench /></details>
+    <SessionReportPanel />
   </main>
   </div>
 </template>

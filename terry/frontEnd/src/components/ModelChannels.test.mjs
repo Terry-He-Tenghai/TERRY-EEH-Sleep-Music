@@ -10,6 +10,7 @@ const app = readFileSync(new URL('../App.vue', import.meta.url), 'utf8')
 function appHarness(overrides = {}) {
   const script = parse(app).descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace(/import\.meta\.env\.\w+/g, "''")
   const bindings = { ref, computed, watch, nextTick, onMounted() {}, onBeforeUnmount() {},
+    beginEvidence() {}, bindEvidence() {}, finishEvidence: async () => {}, logEvidence() {},
     CAP_CHANNELS, MODEL_OPTIONS, plotChannelIndices, qualityChannels, classifyLive: liveClassification,
     waveformStatus, waveformCollection, location: { protocol: 'http:', host: 'localhost' },
     window: { devicePixelRatio: 1 }, ...overrides }
@@ -101,6 +102,9 @@ test('backend model info and structured quality details are readable without cha
   assert.match(result.resetReason, /采集数据间断/)
   assert.match(result.details[0], /C3.*平直信号.*std_uv: 0/)
   assert.match(result.details[1], /C4.*future_reason.*amplitude_uv: 200/)
+  const high = waveformDiagnostics({ quality_details: [{ channel: 'Fp1', reason: 'high_amplitude',
+    finite: true, filtered_ptp_uv: 581.67, largest_second_from_end: 5, seconds_over_500uv: 2 }] })
+  assert.match(high.details[0], /Fp1.*滤波后幅度过大.*30秒峰峰值：581.7 µV.*最大波动距今：5 秒.*超限秒数：2 秒/)
   assert.deepEqual(modelChannelInfo({ classification_channels: 8 }).quality, [...CAP_CHANNELS])
   assert.deepEqual(waveformDiagnostics(null).details, [])
   assert.equal(waveformDiagnostics({ quality_details: [null] }).details[0], '')

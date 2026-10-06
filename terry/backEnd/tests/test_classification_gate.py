@@ -12,7 +12,7 @@ def state(t, **kwargs):
 
 def test_full_window_and_three_confirmations_without_baseline():
     # This gate belongs to the existing DEMO model path. LIVE waveform models
-    # use their own configurable two-confirmation gate in adaptive_web.
+    # authorize on the first quality-checked window in adaptive_web.
     gate = ClassificationGate()
     assert not gate.update(state(27))
     assert not gate.update(state(30))

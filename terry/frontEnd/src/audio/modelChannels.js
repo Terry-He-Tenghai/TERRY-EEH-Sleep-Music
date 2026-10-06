@@ -56,7 +56,16 @@ export function waveformDiagnostics(event) {
     details: Array.isArray(details) ? details.map(detail => {
       if (!detail || typeof detail !== 'object') return readableReason(detail)
       const { channel, reason, ...metrics } = detail
-      const extra = Object.entries(metrics).map(([key, value]) => `${key}: ${readableReason(value)}`).join(' · ')
+      const labels = { finite: '数据有效', flat_seconds: '平直秒数', filtered_ptp_uv: '30秒峰峰值',
+        filtered_std_uv: '30秒标准差', largest_second_ptp_uv: '最大单秒峰峰值',
+        largest_second_from_end: '最大波动距今', seconds_over_500uv: '超限秒数' }
+      const extra = Object.entries(metrics).map(([key, value]) => {
+        if (key === 'finite') return `${labels[key]}：${value ? '是' : '否'}`
+        if (!labels[key]) return `${key}: ${readableReason(value)}`
+        const unit = key.endsWith('_uv') ? ' µV' : key === 'largest_second_from_end' || key === 'flat_seconds' || key === 'seconds_over_500uv' ? ' 秒' : ''
+        const formatted = typeof value === 'number' ? Number(value.toFixed(1)) : readableReason(value)
+        return `${labels[key]}：${formatted}${unit}`
+      }).join(' · ')
       return [channel == null ? '未知电极' : String(channel), readableReason(reason), extra].filter(Boolean).join(' · ')
     }) : details == null ? [] : [readableReason(details)],
   }
