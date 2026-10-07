@@ -2,6 +2,7 @@ import numpy as np
 import soundfile as sf
 import pytest
 from session_reports import Reports, analyze_audio, build_trace
+from session_reports import experiment_row, ExperimentLabel
 
 
 def event(end, stage='N2', **extra):
@@ -110,3 +111,36 @@ def test_report_api_saves_recording_and_analysis(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as exception:
         asyncio.run(module.audio_report(identifier, request(b'invalid')))
     assert exception.value.status_code == 422
+
+
+def test_experiment_missing_data_is_not_zero():
+    row = experiment_row({'id': 'a' * 32, 'started_at_s': 1, 'metadata': {'mode': 'demo'}})
+    assert row['condition'] == 'unassigned'
+    assert row['centroid_hz'] is None
+    assert row['clipped_samples'] is None
+    assert row['playback_errors'] is None
+    assert row['alpha_power_uv2'] is None
+    assert row['ended'] is False
+
+
+def test_experiment_labels_persist_and_export(tmp_path, monkeypatch):
+    import session_reports as module
+    from pydantic import ValidationError
+    store = Reports(tmp_path)
+    monkeypatch.setattr(module, 'reports', store)
+    identifier = store.start({'mode': 'brainflow', 'music_source': 'stems'})
+    store.observe(event(40, classification_ms=12, band_power_uv2={'values': {'alpha': [2, 4]}}))
+    store.finish('manual_stop', 40)
+    module.label_experiment(identifier, ExperimentLabel(participant='P001', condition='closed_loop', comfort=5))
+    row = module.experiment_summary()['rows'][0]
+    assert row['participant'] == 'P001'
+    assert row['classification_ms'] == 12
+    assert row['alpha_power_uv2'] == 3
+    assert row['comfort'] == 5
+    assert row['ended'] is True
+    assert b'P001' in module.experiment_export().body
+    assert store.load(identifier)['windows']
+    with pytest.raises(ValidationError):
+        ExperimentLabel(participant='=formula')
+    with pytest.raises(ValidationError):
+        ExperimentLabel(comfort=8)

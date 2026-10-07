@@ -11,6 +11,11 @@ import soundfile as sf
 from scipy import signal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
+from typing import Literal
+import csv
+import io
 
 ROOT = Path(__file__).parent / 'session_reports'
 router = APIRouter(prefix='/api/session-reports', tags=['session-reports'])
@@ -106,6 +111,89 @@ class Reports:
 reports = Reports()
 
 
+class ExperimentLabel(BaseModel):
+    participant: str = Field(default='', max_length=64, pattern=r'^[A-Za-z0-9_-]*$')
+    condition: Literal['unassigned', 'fixed', 'sham', 'closed_loop'] = 'unassigned'
+    trial: int = Field(default=1, ge=1, le=10000)
+    notes: str = Field(default='', max_length=2000)
+    comfort: float | None = Field(default=None, ge=1, le=7)
+    musicality: float | None = Field(default=None, ge=1, le=7)
+
+
+def mean_available(values):
+    values = [float(v) for v in values if isinstance(v, (int, float)) and np.isfinite(v)]
+    return float(np.mean(values)) if values else None
+
+
+def experiment_row(report):
+    label = report.get('experiment') or {}
+    windows = report.get('windows', [])
+    browser = report.get('browser') or {}
+    frames = ((report.get('audio') or {}).get('metrics') or {}).get('frames', [])
+    events = browser.get('events', [])
+    summary = report.get('eeg_summary') or {}
+    audio_metrics = (report.get('audio') or {}).get('metrics') or {}
+    audio_rate = audio_metrics.get('sample_rate_hz')
+    row = dict(id=report['id'], started_at_s=report['started_at_s'],
+               ended=report.get('ended_at_s') is not None,
+               mode=report.get('metadata', {}).get('mode', 'unknown'),
+               participant=label.get('participant', ''), condition=label.get('condition', 'unassigned'),
+               trial=label.get('trial', 1), end_reason=report.get('end_reason'),
+               music_source=report.get('metadata', {}).get('music_source'),
+               duration_s=summary.get('duration_s'),
+               qualified_window_ratio=summary.get('qualified_window_ratio'),
+               classification_ms=mean_available([w.get('classification_ms') for w in windows]),
+               recorded_seconds=browser.get('recorded_seconds'),
+               recording_status=browser.get('recording_status'),
+               audio_sample_rate_hz=audio_rate,
+               centroid_hz=mean_available([f.get('centroid_hz') for f in frames]),
+               high_frequency_ratio=(mean_available([f.get('high_frequency_ratio') for f in frames])
+                                     if audio_rate and audio_rate > 16000 else None),
+               sample_peak_dbfs=max((f['sample_peak_dbfs'] for f in frames), default=None),
+               clipped_samples=sum(f.get('clipped_samples', 0) for f in frames) if frames else None,
+               rms_jump_candidates=len(report['audio']['metrics'].get('rms_jump_candidates', [])) if frames else None,
+               playback_errors=sum(e.get('type') == 'playback-error' for e in events) if browser else None,
+               control_events=sum(e.get('type') in ('applied', 'phrase-scheduled') for e in events) if browser else None,
+               download_ms=mean_available([e.get('duration_ms') for e in events if e.get('type') == 'download']),
+               decode_ms=mean_available([e.get('duration_ms') for e in events if e.get('type') == 'decode']),
+               comfort=label.get('comfort'), musicality=label.get('musicality'))
+    for band in ('alpha', 'theta', 'beta'):
+        row[f'{band}_power_uv2'] = mean_available([
+            mean_available((w.get('band_power_uv2') or {}).get('values', {}).get(band, []))
+            for w in windows if w.get('signal_quality') == 1])
+    return row
+
+
+def all_experiment_rows():
+    return [experiment_row(json.loads(p.read_text(encoding='utf8')))
+            for p in sorted(reports.root.glob('*.json'), reverse=True)]
+
+
+# Static routes must precede /{identifier}.
+@router.get('/experiments/summary')
+def experiment_summary():
+    return {'rows': all_experiment_rows(), 'storage': str(reports.root.resolve()),
+            'scope': 'Local digital evidence; labels do not implement treatment assignment.'}
+
+
+@router.get('/experiments/export.csv')
+def experiment_export():
+    rows = all_experiment_rows()
+    output = io.StringIO()
+    if rows:
+        writer = csv.DictWriter(output, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    return Response('\ufeff' + output.getvalue(), media_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition': 'attachment; filename="experiment-data.csv"'})
+
+
+@router.put('/{identifier}/experiment')
+def label_experiment(identifier: str, label: ExperimentLabel):
+    reports.attach(identifier, 'experiment', label.model_dump())
+    return {'status': 'saved'}
+
+
 def build_trace(report):
     browser = report.get('browser') or {}
     windows = {window['sequence']: window for window in report.get('windows', [])}
@@ -136,6 +224,7 @@ def analyze_audio(path):
     elapsed = 0.
     with sf.SoundFile(path) as audio:
         rate = audio.samplerate
+        channels = audio.channels
         for block in audio.blocks(blocksize=rate, dtype='float32', always_2d=True):
             if not np.isfinite(block).all():
                 raise ValueError('Nonfinite PCM samples')
@@ -155,6 +244,7 @@ def analyze_audio(path):
     jumps = [dict(time_s=b['time_s'], jump_db=b['rms_dbfs']-a['rms_dbfs'])
              for a, b in zip(frames, frames[1:]) if a['rms_dbfs'] > -60 and b['rms_dbfs']-a['rms_dbfs'] > 6]
     return dict(method='1-second digital PCM RMS/PSD screens; RMS is not LUFS', frames=frames,
+                sample_rate_hz=rate, channels=channels,
                 rms_jump_candidates=jumps, bpm=None, bpm_reason='reliable beat estimator not implemented',
                 onset_density=None, key=None, chords=None, true_peak_dbtp=None,
                 unavailable_reason='No validated beat, tonal, chord or oversampled true-peak estimator yet',

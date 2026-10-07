@@ -1,4 +1,5 @@
 <script setup>
+import { text as t } from '../i18n.js'
 import WaveformQuality from './WaveformQuality.vue'
 import { recordOutput, logEvidence } from '../audio/sessionEvidence.js'
 const telemetryLog = logEvidence
@@ -27,6 +28,18 @@ const holdReasons = {
   configured_realtime_models_missing: '缺少与帽位匹配的分类模型',
   experimental_channel_mapping_contract_mismatch: '实验性电极映射与设备或模型的通道顺序不匹配',
   ...waveformHoldReasons,
+}
+const statusLabelsEn = {
+  '等待有效脑电分类': 'Waiting for valid EEG classification',
+  '已停止': 'Stopped',
+  '分类暂不可用，继续播放已有音乐；暂停分类驱动更新': 'Classification unavailable; continuing current music without classification-driven updates',
+  '连续两次检测到 N2，音乐已暂停': 'N2 detected twice; music paused',
+  '等待有效脑电分类，播放暂停': 'Waiting for valid EEG classification; playback paused',
+  '根据分类生成中': 'Generating from classification',
+  '等待下一次状态生成': 'Waiting for the next state',
+  '自动播放中': 'Playing automatically',
+  '生成失败': 'Generation failed',
+  '播放失败': 'Playback failed',
 }
 let context, gain, current, timer, disposed = false, generation = 0
 const sources = new Set()
@@ -177,8 +190,8 @@ defineExpose({ arm, stop })
 
 <template>
   <section class="ace-auto" aria-labelledby="ace-auto-title">
-    <h2 id="ace-auto-title">脑电驱动音乐</h2>
-    <p role="status">{{ status }} <span v-if="playing">· 正在播放：{{ playingLabel }}</span><span v-if="wantedMusicState && wantedMusicState !== playingMusicState"> · 待切换：{{ musicStateLabels[wantedMusicState] }}</span></p>
+    <h2 id="ace-auto-title">{{ t('脑电驱动音乐', 'EEG-Driven Music') }}</h2>
+    <p role="status">{{ t(status, statusLabelsEn[status] || status) }} <span v-if="playing">· {{ t('正在播放：', 'Playing: ') }}{{ playingLabel }}</span><span v-if="wantedMusicState && wantedMusicState !== playingMusicState"> · {{ t('待切换：', 'Next: ') }}{{ musicStateLabels[wantedMusicState] }}</span></p>
     <p v-if="error" role="alert" class="error-message">{{ error }}</p>
     <p v-if="event?.status === 'blocked'" role="alert">{{ holdReasons[event.reason] || `分类阻断：${event.reason || '未知原因'}` }}</p>
     <template v-if="event?.source === 'LIVE'">
@@ -190,8 +203,8 @@ defineExpose({ arm, stop })
       <p>W / N1 / N2 是模型估计类别；有效分类分别选择 M1 / M2 / M3 音乐方案。连续两次有效 N2 后结束本次采集并生成报告，不代表临床确认入睡。</p>
       <p>模型仅供研究，未经本设备验证；W / N1 / N2 分数不是校准置信度。实时事件超过 15 秒未更新或脑电质量不合格时继续播放已有音乐，暂不按无效或过期分类生成或切换音乐。手动停止或停止采集仍会停止播放。</p>
     </template>
-    <p v-else-if="event?.demo_scripted">预设阶段驱动 AI 生成或上传音频改写；非真实脑电分类。</p>
-    <p v-else>分类状态：{{ event?.classification_confirmed && event?.playback_mode === 'adaptive' ? '已确认' : '等待有效稳定分类' }} · 个体基线：{{ event?.state?.baseline_ready ? '就绪' : '后台收集中' }}</p>
+    <p v-else-if="event?.demo_scripted">{{ t('预设阶段驱动 AI 生成或上传音频改写；非真实脑电分类。', 'Preset stages drive AI generation or uploaded-audio rewriting; not real EEG classification.') }}</p>
+    <p v-else>{{ t('分类状态：', 'Classification: ') }}{{ event?.classification_confirmed && event?.playback_mode === 'adaptive' ? t('已确认', 'Confirmed') : t('等待有效稳定分类', 'Waiting for stable valid classification') }} · {{ t('个体基线：', 'Personal baseline: ') }}{{ event?.state?.baseline_ready ? t('就绪', 'Ready') : t('后台收集中', 'Collecting in background') }}</p>
   </section>
 </template>
 
