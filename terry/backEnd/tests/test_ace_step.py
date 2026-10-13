@@ -26,11 +26,196 @@ def test_submit_style_and_prompt(monkeypatch):
     assert ace.generate(ace.GenerateRequest(style="piano", duration=30))["task_id"] == "task_12345678"
     assert calls[0][0] == "/release_task"
     assert "solo piano" in calls[0][1]["prompt"]
+    assert calls[0][1]['prompt'].startswith('Create gentle music intended for bedtime relaxation and supporting sleep.')
     assert calls[0][1]["audio_duration"] == 30
     assert calls[0][1]["audio_format"] == "wav"
     with pytest.raises(HTTPException) as exc:
         ace.generate(ace.GenerateRequest(style="unknown"))
     assert exc.value.status_code == 422
+
+
+@pytest.mark.parametrize('stage', [None, 'M1', 'M2', 'M3'])
+def test_unselected_genre_preserves_payload(monkeypatch, stage):
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    options = dict(style='piano', music_state=stage)
+    ace.generate(ace.GenerateRequest(**options))
+    ace.generate(ace.GenerateRequest(**options, music_genre=None))
+    assert captured[0] == captured[1]
+    assert 'Genre identity:' not in captured[0]['prompt']
+
+
+@pytest.mark.parametrize('genre', ['classical', 'jazz', 'folk'])
+@pytest.mark.parametrize('style', list(ace.STYLES))
+@pytest.mark.parametrize('stage', [None, 'M1', 'M2', 'M3'])
+def test_genres_preserve_selected_style_and_harmony(monkeypatch, genre, style, stage):
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    ace.generate(ace.GenerateRequest(style=style, music_state=stage, music_genre=genre,
+                                    harmony_mode='harmonic_minor', chord_progression='turnaround'))
+    payload = captured[0]
+    assert f'Genre identity: ' in payload['prompt']
+    assert genre in payload['prompt']
+    assert ace.STYLES[style][1] in payload['prompt']
+    assert 'Am - Dm - E - Am' in payload['prompt']
+    assert (payload['bpm'], payload['keyscale'], payload['time_signature']) == (60, 'A minor', '4')
+    assert 'not an instrument replacement' in payload['prompt']
+
+
+def test_genre_validation_worker_propagation_and_reset(monkeypatch):
+    for model, kwargs in [(ace.GenerateRequest, {'style': 'piano'}),
+                          (web.StartRequest, {'music_source': 'ace', 'music_style': 'piano'})]:
+        assert model(**kwargs).music_genre is None
+        assert model(**kwargs, music_genre='folk').music_genre == 'folk'
+        with pytest.raises(ValidationError):
+            model(**kwargs, music_genre='rock')
+    automatic = ace.AutomaticMusic()
+    automatic.start(90, 'piano', music_genre='jazz')
+    captured = []
+    monkeypatch.setattr(ace, 'generate', lambda request: (
+        captured.append(request), {'task_id': 'task_12345678'})[1])
+    monkeypatch.setattr(ace, 'generation', lambda _: {'status': 'completed', 'audio_url': '/audio'})
+    for stage in ['M1', 'M2', 'M3']:
+        automatic.wanted = stage
+        automatic.last_submit = 0
+        automatic._run(90)
+    assert [request.music_genre for request in captured] == ['jazz'] * 3
+    automatic.start(91, 'ambient')
+    assert automatic.music_genre is None
+    assert automatic.cached == {}
+    automatic.start(92, 'piano', music_genre='folk')
+    automatic.stop()
+    assert automatic.music_genre is None
+
+
+@pytest.mark.parametrize('style', list(ace.STYLES))
+@pytest.mark.parametrize('music_state', ['M1', 'M2', 'M3'])
+def test_stage_prompts_include_detail_and_shared_musical_frame(monkeypatch, style, music_state):
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    ace.generate(ace.GenerateRequest(style=style, music_state=music_state))
+    payload = captured[0]
+    assert (payload['bpm'], payload['keyscale'], payload['time_signature']) == (60, 'C major', '4')
+    prompt = payload['prompt']
+    assert prompt.startswith('Create gentle music intended for bedtime relaxation and supporting sleep.')
+    for detail in ['Meter and tempo:', 'Rhythm:', 'Groove:', 'Melody:', 'Mode and key:',
+                   'Harmony:', 'Cadence:', 'Timbre and waveform envelope:', 'Waveform:',
+                   'Cmaj9 - Am7 - Fmaj7 - C6', 'Transition compatibility:']:
+        assert detail in prompt
+    assert f'Style identity: ' in prompt
+    if style == 'nature':
+        assert 'Nature sounds:' in prompt
+        assert 'No thunder' in prompt
+    else:
+        assert 'nature recording' in prompt
+    if style == 'piano' and music_state == 'M3':
+        assert 'not a replacement synth drone' in prompt
+
+
+def test_stage_transition_keeps_frame_but_changes_arrangement(monkeypatch):
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    for target, previous in [('M1', None), ('M2', 'M1'), ('M3', 'M2'), ('M1', 'M3')]:
+        ace.generate(ace.GenerateRequest(style='ambient', music_state=target, previous_music_state=previous))
+    assert len({(p['bpm'], p['keyscale'], p['time_signature']) for p in captured}) == 1
+    assert 'four- to six-note' in captured[0]['prompt']
+    assert 'new two- or three-note' in captured[1]['prompt']
+    assert 'no foreground tune' in captured[2]['prompt']
+    assert 'This track follows W / awake relaxation' in captured[1]['prompt']
+    assert 'This track follows N1 / sleep onset' in captured[2]['prompt']
+    assert 'This track follows N2 / light sleep' in captured[3]['prompt']
+
+
+def test_stage_cover_preserves_reference_frame(monkeypatch):
+    output = io.BytesIO()
+    with wave.open(output, 'wb') as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(8000)
+        audio.writeframes(b'\x00\x00' * (8000 * 12))
+    monkeypatch.setattr(ace, 'cover_audio', lambda _: output.getvalue())
+    monkeypatch.setattr(ace, 'separate_accompaniment', lambda audio: audio)
+    captured = []
+    monkeypatch.setattr(ace, 'post_cover', lambda payload, audio: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    ace.generate(ace.GenerateRequest(style='strings', music_state='M2', previous_music_state='M1',
+                                    reference_track_id='user_' + 'a' * 32, music_genre='classical'))
+    payload = captured[0]
+    assert not {'bpm', 'keyscale', 'time_signature'} & payload.keys()
+    assert "retain the reference accompaniment's original meter" in payload['prompt']
+    assert 'repeat Cmaj9' not in payload['prompt']
+    assert payload['task_type'] == 'cover'
+    assert payload['prompt'].startswith('Create gentle music intended for bedtime relaxation and supporting sleep.')
+    assert 'Genre identity: restrained classical' in payload['prompt']
+
+
+def test_stage_fields_validate_and_manual_prompt_remains_unchanged(monkeypatch):
+    with pytest.raises(ValidationError):
+        ace.GenerateRequest(style='piano', music_state='N1')
+    with pytest.raises(ValidationError):
+        ace.GenerateRequest(style='piano', previous_music_state='unknown')
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    ace.generate(ace.GenerateRequest(style='piano', description='A quiet waltz'))
+    assert 'A quiet waltz' in captured[0]['prompt']
+    assert 'Target stage:' not in captured[0]['prompt']
+    assert 'bpm' not in captured[0]
+
+
+@pytest.mark.parametrize('mode', list(ace.HARMONY_OPTIONS))
+@pytest.mark.parametrize('progression', ['gentle', 'pop', 'descending', 'turnaround'])
+def test_selected_harmony_remains_identical_across_stages(monkeypatch, mode, progression):
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    for stage in ['M1', 'M2', 'M3']:
+        ace.generate(ace.GenerateRequest(style='piano', music_state=stage,
+                                        harmony_mode=mode, chord_progression=progression))
+    selected = ace.HARMONY_OPTIONS[mode]
+    for payload in captured:
+        assert payload['keyscale'] == selected['key']
+        assert selected['progressions'][progression]['chords'] in payload['prompt']
+        assert selected['instruction'] in payload['prompt']
+        if mode != 'major':
+            assert 'C-major pentatonic' not in payload['prompt']
+    assert len({p['prompt'].split('Mode and key:')[1].split('Arrangement for')[0] for p in captured}) == 1
+
+
+def test_harmony_validates_and_automatic_session_passes_selection(monkeypatch):
+    for model, kwargs in [(ace.GenerateRequest, {'style': 'piano'}),
+                          (web.StartRequest, {'music_source': 'ace', 'music_style': 'piano'})]:
+        with pytest.raises(ValidationError):
+            model(**kwargs, harmony_mode='dorian')
+        with pytest.raises(ValidationError):
+            model(**kwargs, chord_progression='unknown')
+    automatic = ace.AutomaticMusic()
+    automatic.start(54, 'piano', harmony_mode='harmonic_minor', chord_progression='turnaround')
+    automatic.wanted = 'M1'
+    calls = []
+    monkeypatch.setattr(ace, 'generate', lambda request: (
+        calls.append(request), {'task_id': 'task_12345678'})[1])
+    monkeypatch.setattr(ace, 'generation', lambda task_id: {
+        'status': 'completed', 'audio_url': '/generated/audio'})
+    automatic._run(54)
+    assert calls[0].harmony_mode == 'harmonic_minor'
+    assert calls[0].chord_progression == 'turnaround'
+    automatic.start(55, 'ambient')
+    assert automatic.harmony_mode == 'major'
+    assert automatic.chord_progression == 'gentle'
+
+
+def test_manual_generation_uses_explicit_harmony(monkeypatch):
+    captured = []
+    monkeypatch.setattr(ace, 'post', lambda path, payload: (
+        captured.append(payload), {'task_id': 'task_12345678'})[1])
+    ace.generate(ace.GenerateRequest(style='ambient', harmony_mode='natural_minor', chord_progression='pop'))
+    assert 'Am - F - C - G' in captured[0]['prompt']
+    assert captured[0]['keyscale'] == 'A minor'
 
 
 def test_official_extract_selects_base_and_requested_track(monkeypatch):
@@ -229,6 +414,25 @@ def test_automatic_generation_passes_reference_id(monkeypatch):
     automatic._run(54)
     assert calls[0].reference_track_id == track_id
     assert calls[0].duration == 120
+    assert calls[0].music_state == 'M1'
+
+
+def test_automatic_transition_passes_current_audible_stage(monkeypatch):
+    automatic = ace.AutomaticMusic()
+    automatic.start(54, 'electronic')
+    automatic.current = 'M1'
+    automatic.state.update(status='ready', music_state='M1', audio_url='/previous/audio')
+    automatic.wanted = 'M2'
+    calls = []
+    monkeypatch.setattr(ace, 'generate', lambda request: (
+        calls.append(request), {'task_id': 'task_12345678'})[1])
+    monkeypatch.setattr(ace, 'generation', lambda task_id: {
+        'status': 'completed', 'audio_url': '/api/ace/generations/task_12345678/audio'})
+    automatic._run(54)
+    assert calls[0].style == 'electronic'
+    assert calls[0].music_state == 'M2'
+    assert calls[0].previous_music_state == 'M1'
+    assert automatic.status()['music_state'] == 'M2'
 
 
 def test_scripted_demo_generates_without_model_and_keeps_first_completed_audio(monkeypatch):

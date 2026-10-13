@@ -97,6 +97,7 @@ export class AdaptiveEngine {
     this.onUpdate = onUpdate
     this.generation = 0; this.loadToken = 0; this.events = []; this.sources = new Set()
     this.armed = false; this.status = 'unarmed'; this.sequence = -1; this.lastFrame = 0
+    this.n2Count = 0
     this.ownership = event => { if (event.detail !== 'adaptive') this.stop(`audio-owner:${text(event.detail)}`) }
     this.visibility = () => { if (document.hidden) this.stop('页面隐藏，自动播放已停止') }
     window.addEventListener('terry-audio-owner', this.ownership)
@@ -162,6 +163,7 @@ export class AdaptiveEngine {
       }
       this.armed = true; this.status = 'waiting'; this.reason = '声音已授权，等待采集后的新 ready 事件；尚未播放'
       this.session = null; this.sequence = -1; this.armedAt = Date.now(); this.lastReadyAt = 0
+      this.n2Count = 0
       window.dispatchEvent(new CustomEvent('terry-audio-owner', { detail: 'adaptive' }))
       this.timer = window.setInterval(() => {
         try { this.tick() } catch (error) { this.stop(error.message, 'error') }
@@ -185,6 +187,16 @@ export class AdaptiveEngine {
       if (['stopped', 'error'].includes(event.status)) { this.stop(text(event.reason) || event.status, event.status); return }
       if (event.sequence <= this.sequence) return // Duplicates never refresh the freshness deadline.
       this.session = event.session_id; this.sequence = event.sequence; this.source = event.source
+      if (this.fadeStopTimer) return // Quality holds must not cancel an active fade.
+      const validN2 = event.source === 'LIVE' && event.status === 'ready'
+        && event.inference_mode === 'waveform_cnn' && event.classification_confirmed === true
+        && event.signal_quality === 1 && event.playback_mode === 'adaptive'
+        && ['W', 'N1', 'N2'].reduce((best, key) => event.probabilities[key] > event.probabilities[best] ? key : best, 'W') === 'N2'
+      this.n2Count = validN2 ? this.n2Count + 1 : 0
+      if (this.n2Count >= 3) {
+        this.fadeStop('sleep_paused_after_three_n2', 30)
+        return
+      }
       const probabilities = event.probabilities || event.state_probabilities
       this.log('backend-event', { session_id: this.session, sequence: this.sequence, status: event.status, source: event.source, reason: text(event.reason), timestamp_s: event.timestamp_s,
         probability_origin: event.probability_origin ?? 'model', demo_scripted: event.demo_scripted === true,
@@ -233,7 +245,8 @@ export class AdaptiveEngine {
       }
       this.publish()
     } catch (error) {
-      if (event.source === 'LIVE' && /事件时间戳过期或时钟不同步/.test(error.message)) { this.holdLive(); this.publish() }
+      this.n2Count = 0
+      if (event.source === 'LIVE' && /事件时间戳过期或时钟不同步/.test(error.message)) { if (!this.fadeStopTimer) this.holdLive(); this.publish() }
       else this.stop(error.message, 'blocked')
     }
   }
@@ -374,11 +387,11 @@ export class AdaptiveEngine {
     this.transitionPlan = { at, plan }
     this.log('phrase-scheduled', { sequence: plan.sequence, phrase_index: this.nextPhrase, audio_time_s: at, plan })
   }
-  fadeStop(reason) {
+  fadeStop(reason, seconds = 8) {
     if (this.fadeStopTimer) return
-    this.ramp(this.master.gain, 0, this.ctx.currentTime, 8)
+    this.ramp(this.master.gain, 0, this.ctx.currentTime, seconds)
     this.status = 'fading'; this.reason = reason; this.publish()
-    this.fadeStopTimer = setTimeout(() => { this.fadeStopTimer = null; this.stop(reason, 'blocked') }, 8100)
+    this.fadeStopTimer = setTimeout(() => { this.fadeStopTimer = null; this.stop(reason, 'blocked') }, seconds * 1000 + 100)
   }
   tick() {
     if (!this.armed) return

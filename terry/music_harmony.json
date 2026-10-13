@@ -1,0 +1,47 @@
+{
+  "major": {
+    "label": "大调", "label_en": "Major", "key": "C major", "tonic": "C",
+    "scale": "C D E F G A B", "melody": "C D E G A",
+    "instruction": "C major (Ionian); use the pentatonic subset for most melody notes.",
+    "progressions": {
+      "gentle": {"roman": "I - vi - IV - I", "chords": "Cmaj9 - Am7 - Fmaj7 - C6", "cadence": "soft plagal IV to I"},
+      "pop": {"roman": "I - V - vi - IV", "chords": "C - G - Am - F", "cadence": "soft plagal IV to I at the loop boundary"},
+      "descending": {"roman": "I - vi - ii - V", "chords": "Cmaj7 - Am7 - Dm7 - G7", "cadence": "restrained authentic V to I at the loop boundary"},
+      "turnaround": {"roman": "I - IV - V - I", "chords": "C - F - G - C", "cadence": "restrained authentic V to I"}
+    }
+  },
+  "natural_minor": {
+    "label": "自然小调", "label_en": "Natural Minor", "key": "A minor", "tonic": "A",
+    "scale": "A B C D E F G", "melody": "A C D E G",
+    "instruction": "A natural minor (Aeolian); keep F and G natural, no raised leading tone; use the minor pentatonic subset for most melody notes.",
+    "progressions": {
+      "gentle": {"roman": "i - VI - iv - i", "chords": "Am - F - Dm - Am", "cadence": "soft minor plagal iv to i"},
+      "pop": {"roman": "i - VI - III - VII", "chords": "Am - F - C - G", "cadence": "gentle modal VII to i at the loop boundary"},
+      "descending": {"roman": "i - VII - VI - v", "chords": "Am - G - F - Em", "cadence": "soft modal v to i at the loop boundary, without a raised leading tone"},
+      "turnaround": {"roman": "i - iv - v - i", "chords": "Am - Dm - Em - Am", "cadence": "soft modal v to i"}
+    }
+  },
+  "harmonic_minor": {
+    "label": "和声小调", "label_en": "Harmonic Minor", "key": "A minor", "tonic": "A",
+    "scale": "A B C D E F G#", "melody": "A B C D E F G#",
+    "instruction": "A harmonic minor; retain F natural and G# as the leading tone, resolve G# softly to A; avoid melodic leaps across F to G# and avoid dramatic diminished-chord tension.",
+    "progressions": {
+      "gentle": {"roman": "i - VI - iv - i", "chords": "Am - F - Dm - Am", "cadence": "soft minor plagal iv to i"},
+      "pop": {"roman": "i - VI - iv - V", "chords": "Am - F - Dm - E", "cadence": "restrained authentic V to i at the loop boundary"},
+      "descending": {"roman": "i - iv - VI - V", "chords": "Am - Dm - F - E", "cadence": "restrained authentic V to i at the loop boundary"},
+      "turnaround": {"roman": "i - iv - V - i", "chords": "Am - Dm - E - Am", "cadence": "restrained authentic V to i"}
+    }
+  },
+  "melodic_minor": {
+    "label": "旋律小调", "label_en": "Melodic Minor", "key": "A minor", "tonic": "A",
+    "scale": "ascending A B C D E F# G#; descending A G F E D C B",
+    "melody": "A B C D E, adding F# and G# ascending and F and G descending",
+    "instruction": "A classical melodic minor: ascending lines use raised sixth F# and seventh G#, descending lines use F and G natural. Harmony uses the ascending form; use A B C D E for descending lines over D major or E major, so natural F/G do not clash with F#/G# in those chords.",
+    "progressions": {
+      "gentle": {"roman": "i - IV - ii - i", "chords": "Am - D - Bm - Am", "cadence": "gentle ii to i return with common-tone voice leading"},
+      "pop": {"roman": "i - IV - V - i", "chords": "Am - D - E - Am", "cadence": "restrained authentic V to i"},
+      "descending": {"roman": "i - ii - IV - V", "chords": "Am - Bm - D - E", "cadence": "restrained authentic V to i at the loop boundary"},
+      "turnaround": {"roman": "i - ii - V - i", "chords": "Am - Bm - E - Am", "cadence": "restrained authentic V to i"}
+    }
+  }
+}

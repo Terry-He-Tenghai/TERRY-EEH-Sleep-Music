@@ -76,6 +76,8 @@ def test_first_quality_checked_window_can_start_cached_ace_audio(monkeypatch, co
     automatic.consider(first)
     assert automatic.status()['status'] == 'ready'
     automatic.consider(event)
+    assert automatic.status()['status'] == 'ready'
+    automatic.consider({**event, 'sequence': event['sequence'] + 1})
     assert automatic.status()['status'] == 'sleep_paused'
     assert automatic.status()['audio_url'] is None
     automatic.consider({**event, 'status': 'frozen', 'state': None, 'probabilities': None})
@@ -140,6 +142,9 @@ def test_full_counter_cycle_loss_revokes_ace_until_new_context_and_confirmation(
         if 54 <= event['timestamp_s'] < 96:
             assert automatic.status()['status'] in ('paused', 'sleep_paused')
             assert automatic.status()['audio_url'] is None
+    assert automatic.status()['status'] == 'ready'
+    assert automatic.n2_count == 2
+    automatic.consider({**events[-1], 'sequence': events[-1]['sequence'] + 1})
     assert automatic.status()['status'] == 'sleep_paused'
 
 

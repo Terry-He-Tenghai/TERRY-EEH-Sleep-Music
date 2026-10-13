@@ -41,7 +41,7 @@ class _Session:
     stem_track_id: StemTrackId | None = None
     demo_profile: Literal['model', 'showcase'] = 'model'
     classification_channels: Literal[2, 4, 6, 8, 16] = 16
-    music_source: Literal['stems', 'upload', 'ace'] = 'stems'
+    music_source: Literal['stems', 'upload', 'ace', 'external'] = 'stems'
     chunks: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=32))
     cancelled: threading.Event = field(default_factory=threading.Event)
     started_at: float = field(default_factory=time.monotonic)
@@ -85,7 +85,7 @@ class AdaptiveWebService:
         with self._lock:
             return copy.deepcopy(self._last)
 
-    def start(self, mode: str, rate: int, channels: tuple[str, ...], music_style: str = 'all', uploaded_track_id: str | None = None, stem_track_id: StemTrackId | None = None, *, demo_profile: Literal['model', 'showcase'] = 'model', classification_channels: int = 16, music_source: Literal['stems', 'upload', 'ace'] = 'stems') -> int:
+    def start(self, mode: str, rate: int, channels: tuple[str, ...], music_style: str = 'all', uploaded_track_id: str | None = None, stem_track_id: StemTrackId | None = None, *, demo_profile: Literal['model', 'showcase'] = 'model', classification_channels: int = 16, music_source: Literal['stems', 'upload', 'ace', 'external'] = 'stems', generation_floor: int = 0) -> int:
         if classification_channels not in (2, 4, 6, 8, 16):
             raise ValueError('classification_channels must be 2, 4, 6, 8 or 16')
         if demo_profile not in ('model', 'showcase'):
@@ -95,7 +95,7 @@ class AdaptiveWebService:
         with self._lock:
             if self._session:
                 self._session.cancelled.set()
-            self._generation += 1
+            self._generation = max(self._generation + 1, generation_floor)
             ctx = _Session(self._generation, "LIVE" if mode == "brainflow" else "DEMO", rate, channels, music_style, uploaded_track_id, stem_track_id, demo_profile=demo_profile, classification_channels=classification_channels, music_source=music_source)
             self._session = ctx
             self._last = self._empty_event(ctx.generation, ctx.source)
@@ -197,6 +197,8 @@ class AdaptiveWebService:
 
     @staticmethod
     def _track(state: str, ctx: _Session | None = None) -> tuple[dict[str, str] | None, str]:
+        if ctx and ctx.music_source == 'external':
+            return None, 'external_device'
         if ctx and ctx.stem_track_id:
             from babyslakh import get_track
             track = get_track(ctx.stem_track_id)

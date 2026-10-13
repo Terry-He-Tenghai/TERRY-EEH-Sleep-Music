@@ -1,5 +1,9 @@
 <script setup>
 import { onBeforeUnmount, ref } from 'vue'
+import HarmonyControls from './HarmonyControls.vue'
+import GenreControl from './GenreControl.vue'
+import { text as t } from '../i18n.js'
+import { audioMessage } from '../audioMessages.js'
 
 const api = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const styles = [
@@ -8,6 +12,8 @@ const styles = [
   { id: 'electronic', label: '电子' },
 ]
 const style = ref('ambient'), duration = ref(30), description = ref('')
+const harmonyMode = ref('major'), chordProgression = ref('gentle')
+const genre = ref('')
 const status = ref(''), error = ref(''), audioUrl = ref('')
 function playbackError(event) { error.value = `音频播放失败（媒体错误 ${event.target.error?.code || '未知'}），请检查后端音频接口与 SSH 隧道` }
 let pollTimer, active = true, revision = 0
@@ -19,7 +25,8 @@ async function generate() {
   try {
     const response = await fetch(`${api}/api/ace/generations`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ style: style.value, duration: Number(duration.value), description: description.value }),
+      body: JSON.stringify({ style: style.value, duration: Number(duration.value), description: description.value,
+        harmony_mode: harmonyMode.value, chord_progression: chordProgression.value, music_genre: genre.value || null }),
     })
     const body = await response.json()
     if (!response.ok) throw new Error(body.detail || '提交失败')
@@ -48,16 +55,18 @@ onBeforeUnmount(() => { active = false; clearTimeout(pollTimer) })
 
 <template>
   <section class="ace-music" aria-labelledby="ace-title">
-    <h2 id="ace-title">AI 音乐生成</h2>
+    <h2 id="ace-title">{{ t('AI 音乐生成', 'AI Music Generation') }}</h2>
     <div class="ace-controls">
-      <label>风格 <select v-model="style"><option v-for="item in styles" :key="item.id" :value="item.id">{{ item.label }}</option></select></label>
-      <label>时长 <select v-model="duration"><option :value="30">30 秒</option><option :value="60">60 秒</option><option :value="120">120 秒</option></select></label>
-      <label class="ace-description">补充描述 <input v-model="description" maxlength="300" placeholder="可选" /></label>
-      <button type="button" class="primary" @click="generate">{{ status && !audioUrl ? '重新生成' : '生成音乐' }}</button>
+      <label>{{ t('风格', 'Style') }} <select v-model="style"><option v-for="item in styles" :key="item.id" :value="item.id">{{ t(item.label, item.id) }}</option></select></label>
+      <label>{{ t('时长', 'Duration') }} <select v-model="duration"><option v-for="seconds in [30,60,120]" :key="seconds" :value="seconds">{{ seconds }} {{ t('秒', 'seconds') }}</option></select></label>
+      <HarmonyControls v-model:mode="harmonyMode" v-model:progression="chordProgression" />
+      <GenreControl v-model="genre" />
+      <label class="ace-description">{{ t('补充描述', 'Additional description') }} <input v-model="description" maxlength="300" :placeholder="t('可选', 'Optional')" /></label>
+      <button type="button" class="primary" @click="generate">{{ status && !audioUrl ? t('重新生成', 'Regenerate') : t('生成音乐', 'Generate music') }}</button>
     </div>
-    <p v-if="status" role="status">{{ status }}</p>
-    <p v-if="error" class="error-message" role="alert">{{ error }}</p>
-    <audio v-if="audioUrl" :src="audioUrl" controls preload="metadata" @error="playbackError" />
+    <p v-if="status" role="status">{{ t(status, status.replace('正在提交', 'Submitting').replace('生成完成', 'Generation complete').replace('排队 / 生成中', 'Queued / generating').replace('生成中', 'Generating')) }}</p>
+    <p v-if="error" class="error-message" role="alert">{{ audioMessage(error) }}</p>
+    <audio v-if="audioUrl" :src="audioUrl" controls preload="metadata" @loadedmetadata="$event.target.volume = 0.12" @error="playbackError" />
   </section>
 </template>
 

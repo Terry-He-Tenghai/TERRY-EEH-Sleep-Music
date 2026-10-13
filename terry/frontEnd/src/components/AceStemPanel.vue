@@ -1,5 +1,7 @@
 <script setup>
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { text as t } from '../i18n.js'
+import { audioMessage } from '../audioMessages.js'
 
 const props = defineProps({ trackId: String, disabled: Boolean })
 const api = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
@@ -65,11 +67,11 @@ onBeforeUnmount(reset)
 
 <template>
   <div class="ace-stems">
-    <label>提取声部 <select v-model="track" :disabled="busy || disabled"><option v-for="[id, name] in options" :key="id" :value="id">{{ name }}</option></select></label>
-    <button type="button" :disabled="!trackId || busy || disabled" @click="extract">{{ busy ? '正在提取…' : '提取声部' }}</button>
-    <span v-if="busy" role="status">ACE-Step base 处理中</span>
-    <span v-if="error" role="alert">{{ error }}</span>
-    <template v-if="audioUrl"><audio :src="audioUrl" controls /><a :href="audioUrl" download="extracted-stem.wav">下载声部</a></template>
+    <label>{{ t('提取声部', 'Extract stem') }} <select v-model="track" :disabled="busy || disabled"><option v-for="[id, name] in options" :key="id" :value="id">{{ t(name, id.replaceAll('_', ' ')) }}</option></select></label>
+    <button type="button" :disabled="!trackId || busy || disabled" @click="extract">{{ busy ? t('正在提取…', 'Extracting…') : t('提取声部', 'Extract stem') }}</button>
+    <span v-if="busy" role="status">{{ t('ACE-Step base 处理中', 'ACE-Step base processing') }}</span>
+    <span v-if="error" role="alert">{{ audioMessage(error) }}</span>
+    <template v-if="audioUrl"><audio :src="audioUrl" controls @loadedmetadata="$event.target.volume = 0.12" /><a :href="audioUrl" download="extracted-stem.wav">{{ t('下载声部', 'Download stem') }}</a></template>
   </div>
 </template>
 

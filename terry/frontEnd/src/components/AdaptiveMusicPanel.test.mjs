@@ -107,6 +107,32 @@ function startLive(engine) {
   engine.ctx.currentTime = .2; engine.tick()
   assert.equal(engine.status, 'playing')
 }
+test('uploaded music fades only after three distinct valid LIVE N2 windows', () => {
+  const engine = liveHarness()
+  const n2 = sequence => ({ ...liveEvent(sequence), inference_mode: 'waveform_cnn',
+    probability_origin: 'trained_waveform_cnn_experimental', classification_confirmed: true,
+    playback_mode: 'adaptive', state: { status: 'ok' }, probabilities: { W: .05, N1: .15, N2: .8 } })
+  const fades = []
+  engine.fadeStop = (...args) => fades.push(args)
+  engine.consume(n2(1)); engine.consume(n2(1)); engine.consume(n2(2))
+  assert.equal(engine.n2Count, 2); assert.deepEqual(fades, [])
+  engine.consume({ ...liveEvent(3), status: 'frozen', reason: 'invalid_or_low_quality_eeg' })
+  assert.equal(engine.n2Count, 0)
+  engine.consume(n2(4)); engine.consume(n2(5)); engine.consume(n2(6))
+  assert.deepEqual(fades, [['sleep_paused_after_three_n2', 30]])
+  engine.dispose()
+})
+test('waiting and stale events cannot interrupt an active sleep fade', () => {
+  const engine = liveHarness(); startLive(engine)
+  engine.fadeStop('sleep_paused_after_three_n2', 30)
+  let held = false
+  engine.holdLive = () => { held = true }
+  engine.consume({ ...liveEvent(2), status: 'waiting' })
+  engine.consume({ ...liveEvent(3), timestamp_s: (Date.now()-16000)/1000 })
+  assert.equal(held, false)
+  assert.ok(engine.fadeStopTimer)
+  engine.dispose()
+})
 test('LIVE expired plan keeps bed, freezes scheduling, preserves EEG freshness and resumes on new data', () => {
   const engine = liveHarness(); startLive(engine)
   const source = engine.trackSource.source, ready = engine.lastReadyAt

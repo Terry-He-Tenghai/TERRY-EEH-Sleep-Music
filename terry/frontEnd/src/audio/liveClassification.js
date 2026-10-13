@@ -1,3 +1,4 @@
+import { text as t, labels } from '../i18n.js'
 export const LIVE_MAX_AGE_MS = 15000
 export const WAVEFORM_ORIGIN = 'trained_waveform_cnn_experimental'
 const stages = ['W', 'N1', 'N2']
@@ -37,11 +38,11 @@ export function canContinueAutomatic(event, playingSession, now = Date.now()) {
   return stale || ['waiting', 'frozen'].includes(event.status)
 }
 
-export const musicStateLabels = {
+export const musicStateLabels = labels({
   M1: 'M1 · 清醒安定音乐', M2: 'M2 · 入睡过渡音乐', M3: 'M3 · 浅睡维持音乐',
-}
+}, { M1: 'M1 · Awake relaxation', M2: 'M2 · Sleep-onset transition', M3: 'M3 · Light-sleep maintenance' })
 
-export const waveformHoldReasons = {
+export const waveformHoldReasons = labels({
   initializing_waveform_model: '正在加载本地波形模型',
   waveform_model_prediction_failed: '波形模型推理失败，已停止分类和音乐',
   recollecting_after_inference_backlog: '分类处理积压，已丢弃旧数据并重新收集窗口',
@@ -57,15 +58,31 @@ export const waveformHoldReasons = {
   waveform_requires_full_cap_capture: '波形模型需要完整采集全部 16 路电极',
   waveform_model_configuration_error: '波形模型配置错误',
   waveform_cnn_research_only: '波形 CNN 仅供研究，未经本设备验证',
-}
+}, {
+  initializing_waveform_model: 'Loading local waveform model',
+  waveform_model_prediction_failed: 'Waveform inference failed; classification and music stopped',
+  recollecting_after_inference_backlog: 'Inference backlog; collecting a new window',
+  inference_queue_overflow_restart_required: 'Inference queue overflow; restart the updated backend',
+  collecting_model_window: 'Collecting a continuous 40-second model window',
+  confirming_state_classification: 'Model scores available; waiting for the generation threshold',
+  invalid_or_low_quality_eeg: 'EEG quality rejected; existing music continues pending valid classification',
+  waiting_for_live_data: 'Waiting for device data; existing music continues without updates',
+  recollecting_after_packet_gap: 'Missing or duplicate packets; recollecting a continuous 40-second window',
+  waveform_model_missing: 'Selected cap2 / cap4 / cap6 / cap8 / cap16 model is missing',
+  waveform_model_contract_mismatch: 'Waveform model input contract does not match device configuration',
+  waveform_model_load_failed: 'Waveform model failed to load',
+  waveform_requires_full_cap_capture: 'Waveform model requires all 16 acquisition channels',
+  waveform_model_configuration_error: 'Waveform model configuration error',
+  waveform_cnn_research_only: 'Research-only waveform CNN; not validated on this device',
+})
 
 export function waveformStatus(event, now = Date.now()) {
-  if (!isFreshLiveEvent(event, now)) return '等待新的实时脑电事件；已有音乐继续播放，暂停分类驱动更新'
+  if (!isFreshLiveEvent(event, now)) return t('等待新的实时脑电事件；已有音乐继续播放，暂停分类驱动更新', 'Waiting for fresh EEG; existing music continues without classification-driven updates')
   const reason = event.inference_hold_reason || event.reason
-  return waveformHoldReasons[reason] || (event.classification_confirmed ? '分类已确认（研究用途）' : '等待有效稳定分类')
+  return waveformHoldReasons[reason] || (event.classification_confirmed ? t('分类已确认（研究用途）', 'Classification confirmed (research only)') : t('等待有效稳定分类', 'Waiting for stable valid classification'))
 }
 
 export function waveformCollection(event) {
   const seconds = event?.waveform_model?.collected_seconds
-  return `${Number.isFinite(seconds) ? Math.min(40, Math.max(0, seconds)).toFixed(1) : '0.0'} / 40 秒`
+  return `${Number.isFinite(seconds) ? Math.min(40, Math.max(0, seconds)).toFixed(1) : '0.0'} / 40 ${t('秒', 's')}`
 }

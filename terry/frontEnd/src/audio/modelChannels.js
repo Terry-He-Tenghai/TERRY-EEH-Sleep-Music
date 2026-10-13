@@ -1,9 +1,10 @@
+import { text as t } from '../i18n.js'
 // CAP16 acquisition order. Model selection never changes the acquisition buffer.
 export const CAP_CHANNELS = Object.freeze(['Fp1', 'Fp2', 'C3', 'C4', 'P7', 'P8', 'O1', 'O2', 'F7', 'F8', 'F3', 'F4', 'T7', 'T8', 'P3', 'P4'])
 export const MODEL_OPTIONS = Object.freeze([
-  { count: 2, channels: ['Fp1', 'Fp2'] },
-  { count: 4, channels: ['Fp1', 'Fp2', 'F3', 'F4'] },
-  { count: 6, channels: ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8'] },
+  { count: 2, channels: ['Fp1', 'Fp2'], sourceChannels: ['Fp1', 'C3'] },
+  { count: 4, channels: ['Fp1', 'Fp2', 'F3', 'F4'], sourceChannels: ['Fp1', 'C3', 'F3', 'F4'] },
+  { count: 6, channels: ['Fp1', 'Fp2', 'F3', 'F4', 'F7', 'F8'], sourceChannels: ['Fp1', 'C3', 'F3', 'F4', 'F7', 'F8'] },
   { count: 8, channels: CAP_CHANNELS.slice(0, 8) },
   { count: 16, channels: [...CAP_CHANNELS] },
 ])
@@ -11,7 +12,8 @@ export function modelChannels(count) {
   return [...(MODEL_OPTIONS.find(option => option.count === Number(count))?.channels || CAP_CHANNELS)]
 }
 export function plotChannelIndices(acquisitionChannels, count, showAll = false, live = true) {
-  const selected = live && !showAll ? modelChannels(count) : acquisitionChannels
+  const option = MODEL_OPTIONS.find(option => option.count === Number(count))
+  const selected = live && !showAll ? option?.sourceChannels || modelChannels(count) : acquisitionChannels
   return selected.map(channel => acquisitionChannels.indexOf(channel)).filter(index => index >= 0)
 }
 export function qualityChannels(count) {
@@ -42,7 +44,7 @@ const reasonLabels = {
 }
 export function readableReason(reason) {
   if (reason == null || reason === '') return ''
-  if (typeof reason === 'string') return reasonLabels[reason] ? `${reasonLabels[reason]}（${reason}）` : reason
+  if (typeof reason === 'string') return reasonLabels[reason] ? t(`${reasonLabels[reason]}（${reason}）`, reason.replaceAll('_', ' ') + ` (${reason})`) : reason
   if (Array.isArray(reason)) return reason.map(readableReason).join('；')
   return JSON.stringify(reason)
 }
@@ -56,17 +58,18 @@ export function waveformDiagnostics(event) {
     details: Array.isArray(details) ? details.map(detail => {
       if (!detail || typeof detail !== 'object') return readableReason(detail)
       const { channel, reason, ...metrics } = detail
-      const labels = { finite: '数据有效', flat_seconds: '平直秒数', filtered_ptp_uv: '30秒峰峰值',
+      const zhLabels = { finite: '数据有效', flat_seconds: '平直秒数', filtered_ptp_uv: '30秒峰峰值',
         filtered_std_uv: '30秒标准差', largest_second_ptp_uv: '最大单秒峰峰值',
         largest_second_from_end: '最大波动距今', seconds_over_500uv: '超限秒数' }
+      const labels = t(zhLabels, { finite: 'Finite samples', flat_seconds: 'Flatline duration', filtered_ptp_uv: '30 s peak-to-peak', filtered_std_uv: '30 s standard deviation', largest_second_ptp_uv: 'Largest 1 s peak-to-peak', largest_second_from_end: 'Time since largest fluctuation', seconds_over_500uv: 'Duration above threshold' })
       const extra = Object.entries(metrics).map(([key, value]) => {
-        if (key === 'finite') return `${labels[key]}：${value ? '是' : '否'}`
+        if (key === 'finite') return `${labels[key]}: ${value ? t('是', 'Yes') : t('否', 'No')}`
         if (!labels[key]) return `${key}: ${readableReason(value)}`
-        const unit = key.endsWith('_uv') ? ' µV' : key === 'largest_second_from_end' || key === 'flat_seconds' || key === 'seconds_over_500uv' ? ' 秒' : ''
+        const unit = key.endsWith('_uv') ? ' µV' : key === 'largest_second_from_end' || key === 'flat_seconds' || key === 'seconds_over_500uv' ? t(' 秒', ' s') : ''
         const formatted = typeof value === 'number' ? Number(value.toFixed(1)) : readableReason(value)
         return `${labels[key]}：${formatted}${unit}`
       }).join(' · ')
-      return [channel == null ? '未知电极' : String(channel), readableReason(reason), extra].filter(Boolean).join(' · ')
+      return [channel == null ? t('未知电极', 'Unknown electrode') : String(channel), readableReason(reason), extra].filter(Boolean).join(' · ')
     }) : details == null ? [] : [readableReason(details)],
   }
 }

@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from ace_music_prompts import ChordProgression, HarmonyMode, MusicGenre, HARMONY_OPTIONS, genre_prompt, harmonic_frame, stage_prompt
+
 router = APIRouter(prefix="/api/ace", tags=["ace-step"])
 STYLES = {
     "ambient": ("氛围", "soft ambient pads, slow evolving textures, warm and spacious"),
@@ -34,6 +36,11 @@ class GenerateRequest(BaseModel):
     description: str = Field(default="", max_length=300)
     duration: int = Field(default=30, ge=10, le=120)
     reference_track_id: str | None = Field(default=None, pattern=r'^user_[a-f0-9]{32}$')
+    music_state: Literal['M1', 'M2', 'M3'] | None = None
+    previous_music_state: Literal['M1', 'M2', 'M3'] | None = None
+    harmony_mode: HarmonyMode = 'major'
+    chord_progression: ChordProgression = 'gentle'
+    music_genre: MusicGenre | None = None
 
 
 class ExtractRequest(BaseModel):
@@ -62,6 +69,9 @@ class AutomaticMusic:
         self.last_live_sequence = None
         self.reference_track_id = None
         self.demo_scripted = False
+        self.harmony_mode = 'major'
+        self.chord_progression = 'gentle'
+        self.music_genre = None
 
     def _expire_live(self):
         if self.live_valid_until is not None and time.monotonic() > self.live_valid_until:
@@ -70,11 +80,14 @@ class AutomaticMusic:
                 self.wanted = None
             self.live_valid_until = None
 
-    def start(self, session, style, reference_track_id=None):
+    def start(self, session, style, reference_track_id=None, harmony_mode='major', chord_progression='gentle', music_genre=None):
         with self.lock:
             self.session = session
             self.style = style
             self.reference_track_id = reference_track_id
+            self.harmony_mode = harmony_mode
+            self.chord_progression = chord_progression
+            self.music_genre = music_genre
             self.demo_scripted = False
             self.live_valid_until = None
             self.n2_count = 0
@@ -90,6 +103,7 @@ class AutomaticMusic:
         with self.lock:
             self.session += 1
             self.style = None
+            self.music_genre = None
             self.reference_track_id = None
             self.demo_scripted = False
             self.live_valid_until = None
@@ -142,7 +156,7 @@ class AutomaticMusic:
                 return
             if event.get('source') == 'LIVE':
                 sequence = event.get('sequence')
-                if sequence is not None and sequence == self.last_live_sequence:
+                if sequence is not None and self.last_live_sequence is not None and sequence <= self.last_live_sequence:
                     return
                 self.last_live_sequence = sequence
                 stage = (event.get('waveform_model') or {}).get('stage')
@@ -150,7 +164,7 @@ class AutomaticMusic:
                     stage = max(('W', 'N1', 'N2'), key=lambda key: probabilities[key])
                 if stage == 'N2':
                     self.n2_count += 1
-                    if self.n2_count >= 2:
+                    if self.n2_count >= 3:
                         self.sleep_paused = True
                 else:
                     self.n2_count = 0
@@ -205,13 +219,15 @@ class AutomaticMusic:
                 style = self.style
                 reference_track_id = self.reference_track_id
                 demo_scripted = self.demo_scripted
-            descriptions = {
-                "M1": "Awake relaxation: clear, warm piano melody in the foreground, gently pulsing soft pads, steady slow tempo and recognizable phrases.",
-                "M2": "Falling asleep: sparse felt-piano notes with long pauses, sustained strings underneath, slower free-flowing pulse and fewer melodic changes.",
-                "M3": "Light sleep: nearly beatless sustained ambient drones and airy soft pads; no lead piano, no distinct melody, no percussion, minimal changes and very quiet dynamics.",
-            }
+                previous_music_state = self.state.get('music_state')
+                harmony_mode = self.harmony_mode
+                chord_progression = self.chord_progression
+                music_genre = self.music_genre
             try:
-                task_id = generate(GenerateRequest(style=style, description=descriptions[target],
+                task_id = generate(GenerateRequest(style=style, music_state=target,
+                                                    previous_music_state=previous_music_state,
+                                                    harmony_mode=harmony_mode, chord_progression=chord_progression,
+                                                    music_genre=music_genre,
                                                     duration=30 if demo_scripted and not reference_track_id else 120,
                                                     reference_track_id=reference_track_id))["task_id"]
                 deadline = time.monotonic() + (1800 if reference_track_id else 300)
@@ -376,11 +392,25 @@ def generate(request: GenerateRequest):
     if request.style not in STYLES:
         raise HTTPException(422, "不支持的音乐风格")
     description = request.description.strip()
-    prompt = f"Instrumental {STYLES[request.style][1]}; no vocals, no abrupt transients, even volume."
+    prompt = ("Create gentle music intended for bedtime relaxation and supporting sleep. "
+              "Keep dynamics quiet and even, with soft attacks, gradual transitions, no sudden loud sounds, "
+              "and a smooth, unhurried ending. "
+              f"Instrumental {STYLES[request.style][1]}; no vocals, no abrupt transients, even volume.")
     if description:
         prompt += f" {description}"
+    if request.music_state:
+        prompt += " " + stage_prompt(request.style, request.music_state,
+                                     reference=bool(request.reference_track_id),
+                                     previous_music_state=request.previous_music_state,
+                                     harmony_mode=request.harmony_mode, chord_progression=request.chord_progression)
+    elif not request.reference_track_id and {'harmony_mode', 'chord_progression'} & request.model_fields_set:
+        prompt += ' ' + harmonic_frame(request.harmony_mode, request.chord_progression)
+    if request.music_genre is not None:
+        prompt += ' ' + genre_prompt(request.music_genre)
     payload = {"prompt": prompt, "lyrics": "[Instrumental]", "audio_duration": request.duration,
                "thinking": False, "audio_format": "wav", "batch_size": 1}
+    if (request.music_state or {'harmony_mode', 'chord_progression'} & request.model_fields_set) and not request.reference_track_id:
+        payload.update(bpm=60, keyscale=HARMONY_OPTIONS[request.harmony_mode]['key'], time_signature='4')
     if request.reference_track_id:
         source_audio = cover_audio(request.reference_track_id)
         with wave.open(io.BytesIO(source_audio), 'rb') as audio:

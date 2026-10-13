@@ -2,7 +2,7 @@ const api = (import.meta.env?.VITE_API_BASE || '').replace(/\/$/, '')
 let active = null
 export function beginEvidence(metadata) {
   active = { metadata, started_at_s: Date.now()/1000, events: [], chunks: [], bytes: 0,
-    recording_status: 'waiting_for_audio', id: null, finished: false }
+    recording_status: metadata.music_source === 'external' ? 'external_audio_not_recorded' : 'waiting_for_audio', id: null, finished: false }
 }
 export function bindEvidence(id) { if (active && !active.finished) active.id = id }
 export function logEvidence(type, fields = {}) {
@@ -53,6 +53,7 @@ export async function finishEvidence(reason) {
     })
   }
   session.finished = true
+  if (session.recording_status === 'recording') session.recording_status = 'saved'
   try { session.output?.disconnect(session.node); session.node?.disconnect(); session.mute?.disconnect() } catch { /* Context already ended. */ }
   const audio = session.bytes ? wav(session) : null
   const evidence = { metadata: session.metadata, reason, started_at_s: session.started_at_s,

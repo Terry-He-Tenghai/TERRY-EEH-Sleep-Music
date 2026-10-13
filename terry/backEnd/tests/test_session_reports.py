@@ -20,13 +20,14 @@ def test_n2_requires_distinct_qualified_live_windows(tmp_path):
     invalid['signal_quality'] = 0.
     assert not reports.observe(invalid)
     assert not reports.observe(event(52))
-    assert reports.observe(event(58))
+    assert not reports.observe(event(58))
+    assert reports.observe(event(64))
     reports.finish('two_valid_n2', 58)
     reports.finish('manual_stop', 60)
     report = reports.load(identifier)
     assert report['end_reason'] == 'two_valid_n2'
-    assert len(report['windows']) == 4
-    assert report['eeg_summary']['qualified_window_ratio'] == .75
+    assert len(report['windows']) == 5
+    assert report['eeg_summary']['qualified_window_ratio'] == .8
     assert report['eeg_summary']['packet_loss'] is None
 
 
@@ -107,6 +108,10 @@ def test_report_api_saves_recording_and_analysis(tmp_path, monkeypatch):
     assert asyncio.run(module.audio_report(identifier, request(path.read_bytes())))['status'] == 'saved'
     saved = module.get_report(identifier)
     assert saved['audio']['metrics']['frames'][0]['rms_dbfs'] == -240
+    assert saved['ai_music_evaluation']['scores']['pleasantness'] is None
+    row = experiment_row(saved)
+    assert row['analyzed_audio_seconds'] == 1
+    assert row['rms_dbfs'] == -240
     assert module.download_audio(identifier).path.read_bytes()[:4] == b'RIFF'
     with pytest.raises(HTTPException) as exception:
         asyncio.run(module.audio_report(identifier, request(b'invalid')))
@@ -121,6 +126,31 @@ def test_experiment_missing_data_is_not_zero():
     assert row['playback_errors'] is None
     assert row['alpha_power_uv2'] is None
     assert row['ended'] is False
+    assert row['rms_dbfs'] is None
+    assert row['ai_pleasantness'] is None
+    assert row['recording_completeness'] == 'no_audio'
+
+
+def test_audio_ai_adapter_validates_provenance_and_scores(tmp_path, monkeypatch):
+    import json
+    import subprocess
+    import music_evaluation as module
+    monkeypatch.delenv('MUSIC_AUDIO_EVALUATOR_COMMAND', raising=False)
+    assert module.evaluate_music(tmp_path / 'mix.wav')['status'] == 'unavailable'
+    monkeypatch.setenv('MUSIC_AUDIO_EVALUATOR_COMMAND', 'local-model --json')
+    payload = dict(audio_analyzed=True, model='audio-model', model_version='v1', method='rubric-v1',
+                   scores=dict(pleasantness=5, coherence=6, transition_naturalness=4))
+    def run(args, **kwargs):
+        assert args[-1] == str((tmp_path / 'mix.wav').resolve())
+        assert not kwargs.get('shell')
+        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(module.subprocess, 'run', run)
+    assert module.evaluate_music(tmp_path / 'mix.wav')['scores']['pleasantness'] == 5
+    payload['scores']['pleasantness'] = 8
+    assert module.evaluate_music(tmp_path / 'mix.wav')['status'] == 'failed'
+    payload['scores']['pleasantness'] = 5
+    payload['audio_analyzed'] = False
+    assert module.evaluate_music(tmp_path / 'mix.wav')['scores']['pleasantness'] is None
 
 
 def test_experiment_labels_persist_and_export(tmp_path, monkeypatch):
@@ -144,3 +174,73 @@ def test_experiment_labels_persist_and_export(tmp_path, monkeypatch):
         ExperimentLabel(participant='=formula')
     with pytest.raises(ValidationError):
         ExperimentLabel(comfort=8)
+
+
+def test_experiments_sorted_by_start_not_random_id(tmp_path, monkeypatch):
+    import session_reports as module
+    store = Reports(tmp_path)
+    monkeypatch.setattr(module, 'reports', store)
+    for identifier, started in [('f' * 32, 1), ('a' * 32, 2)]:
+        store.current = dict(id=identifier, started_at_s=started, metadata={})
+        store.save()
+    assert [r['started_at_s'] for r in module.all_experiment_rows()] == [2, 1]
+    assert [r['started_at_s'] for r in module.list_reports()] == [2, 1]
+
+
+@pytest.mark.parametrize('audio_first', [False, True])
+def test_auto_song_waits_for_ended_session_and_audio(tmp_path, monkeypatch, audio_first):
+    import threading
+    import session_reports as module
+    import songeval_client
+    store = Reports(tmp_path)
+    monkeypatch.setattr(module, 'reports', store)
+    done = threading.Event()
+    def evaluate(path):
+        assert path.exists()
+        assert store.load(identifier)['ended_at_s'] is not None
+        return {'status': 'completed', 'scores': {}}
+    monkeypatch.setattr(songeval_client, 'evaluate', evaluate)
+    original = module.run_songeval
+    def run(*args):
+        try:
+            original(*args)
+        finally:
+            done.set()
+    monkeypatch.setattr(module, 'run_songeval', run)
+    identifier = store.start({'auto_songeval': True})
+    if not audio_first:
+        store.finish('manual_stop', 1)
+        assert identifier not in module.active_song_jobs
+    (tmp_path / f'{identifier}.wav').write_bytes(b'audio')
+    store.attach(identifier, 'audio', {'metrics': {}})
+    module.queue_automatic_song(identifier)
+    if audio_first:
+        assert identifier not in module.active_song_jobs
+        store.finish('manual_stop', 1)
+    assert done.wait(5)
+    assert store.load(identifier)['songeval']['status'] == 'completed'
+    assert identifier not in module.active_song_jobs
+
+
+def test_auto_song_requires_opt_in(tmp_path, monkeypatch):
+    import session_reports as module
+    store = Reports(tmp_path)
+    monkeypatch.setattr(module, 'reports', store)
+    identifier = store.start({})
+    (tmp_path / f'{identifier}.wav').write_bytes(b'audio')
+    store.attach(identifier, 'audio', {'metrics': {}})
+    store.finish('manual_stop', 1)
+    module.queue_automatic_song(identifier)
+    assert identifier not in module.active_song_jobs
+
+
+def test_auto_song_does_not_rate_silence(tmp_path, monkeypatch):
+    import session_reports as module
+    store = Reports(tmp_path)
+    monkeypatch.setattr(module, 'reports', store)
+    identifier = store.start({'auto_songeval': True})
+    (tmp_path / f'{identifier}.wav').write_bytes(b'audio')
+    store.attach(identifier, 'audio', {'metrics': {'frames': [{'sample_peak_dbfs': -240}]}})
+    store.finish('manual_stop', 1)
+    assert identifier not in module.active_song_jobs
+    assert 'silence' in store.load(identifier)['songeval']['reason']

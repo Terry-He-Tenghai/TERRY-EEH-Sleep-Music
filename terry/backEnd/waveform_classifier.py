@@ -103,7 +103,10 @@ class WaveformClassifier:
         self.contract = frontal_training_code() if self.subset else legacy
         self.selected_channels = tuple(self.contract.MONTAGES[count]) if self.subset else legacy.CAP16[:count]
         self.quality_channels = self.selected_channels if self.subset else legacy.CAP16
-        self.indices = [legacy.CAP16.index(name) for name in self.quality_channels]
+        # Confirmed frontal wiring: device input 3 (nominal C3) is on scalp Fp2.
+        self.source_channels = tuple('C3' if self.subset and name == 'Fp2' else name
+                                     for name in self.quality_channels)
+        self.indices = [legacy.CAP16.index(name) for name in self.source_channels]
         self.pipeline = self.contract.pipeline_for(count) if self.subset else legacy.PIPELINE
         self.architecture = 'build_model:cap-waveform-frontal-v1' if self.subset else 'build_model:cap-waveform-v1'
         self.model = None
@@ -145,6 +148,8 @@ class WaveformClassifier:
                 "hardware_validated": False, "probabilities_calibrated": False,
                 "selected_channels": list(self.selected_channels),
                 "quality_channels": list(self.quality_channels),
+                "source_channels": list(self.source_channels),
+                "source_device_channels": [index + 1 for index in self.indices],
                 "quality_scope": 'selected_channels' if self.subset else 'all_16_channels',
                 "window_seconds": 30, "update_seconds": 6}
 
@@ -225,9 +230,13 @@ class WaveformClassifier:
         frequencies, density = welch(self.buffer, fs=self.rate, nperseg=self.rate * 4, axis=1)
         power = {name: np.trapezoid(density[:, (frequencies >= low) & (frequencies < high)],
                                    frequencies[(frequencies >= low) & (frequencies < high)], axis=1).tolist()
-                 for name, low, high in [('alpha', 8, 13), ('theta', 4, 8), ('beta', 13, 30)]}
+                 for name, low, high in [('alpha', 8, 13), ('alpha_8_12', 8, 12), ('theta', 4, 8), ('beta', 13, 30), ('total_1_30', 1, 30)]}
+        relative = {name: [value / total if total > 0 else None
+                          for value, total in zip(power[key], power['total_1_30'])]
+                    for name, key in [('alpha', 'alpha_8_12'), ('theta', 'theta')]}
         return {"status": "ready", "probabilities": dict(zip(self.contract.STAGES, probabilities.tolist())),
                 "classification_ms": (time.perf_counter() - started) * 1000,
                 "band_power_uv2": {'channels': list(self.quality_channels), 'values': power,
+                                   'relative': relative, 'relative_denominator_hz': [1, 30],
                                    'scope': 'quality-qualified raw 40-second window; Welch absolute uV^2'},
                 "info": {**self.info(), "stage": stage, "prediction_end_s": float(end_s)}}

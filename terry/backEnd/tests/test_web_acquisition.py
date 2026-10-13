@@ -35,6 +35,39 @@ def test_invalid_sample_rate():
         web.StartRequest(sample_rate_hz=2000)
 
 
+def test_experiment_identity_saved_before_acquisition_failure(tmp_path, monkeypatch):
+    import time
+    from raw_recording import RawRecording
+    from session_reports import Reports
+    store = Reports(tmp_path / 'reports')
+    monkeypatch.setattr(web, 'reports', store)
+    monkeypatch.setattr(web, 'RawRecording', lambda meta: RawRecording(meta, root=tmp_path / 'raw'))
+    service = web.AcquisitionService()
+    monkeypatch.setattr(service._adaptive, 'start', lambda *args, **kwargs: 1)
+    monkeypatch.setattr(service._sham, 'start', lambda *args, **kwargs: 1)
+    monkeypatch.setattr(service, '_run_sham', lambda generation: service._stop_event.wait(2))
+    monkeypatch.setattr(web.ace_automatic, 'stop', lambda: None)
+    seen = []
+
+    def fail(request):
+        seen.append(store.load(store.current['id'])['experiment'])
+        raise RuntimeError('Test acquisition failure')
+
+    monkeypatch.setattr(service, '_run_brainflow', fail)
+    service.start(web.StartRequest(mode='brainflow', experiment={
+        'participant': 'P001', 'condition': 'sham', 'visit': 2}))
+    deadline = time.monotonic() + 3
+    while service._thread.is_alive() and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert not service._thread.is_alive()
+    assert not service._sham_thread.is_alive()
+    assert seen[0]['participant'] == 'P001'
+    assert seen[0]['condition'] == 'sham'
+    assert seen[0]['visit'] == 2
+    assert store.load(store.current['id'])['end_reason'] == 'acquisition_error'
+    assert store.load(store.current['id'])['raw_recording']['complete']
+
+
 def test_full_cap_montage_and_hardware_channel_power():
     assert web.CAP_CHANNEL_NAMES == (
         'Fp1', 'Fp2', 'C3', 'C4', 'P7', 'P8', 'O1', 'O2',
@@ -233,6 +266,55 @@ def test_first_samples_mark_connected():
     service._publish_chunk(np.zeros((16, 25)), 0)
     assert service.status().connected
     assert service.status().samples_emitted == 25
+
+
+def test_acquisition_records_before_display_filter_and_closes_on_exit(tmp_path, monkeypatch):
+    from raw_recording import RawRecording
+    monkeypatch.setattr(web, 'RawRecording', lambda metadata: RawRecording(metadata, tmp_path))
+    service = web.AcquisitionService()
+    monkeypatch.setattr(service._adaptive, 'start', lambda *args, **kwargs: 1)
+    monkeypatch.setattr(service._adaptive, 'stop', lambda *args, **kwargs: None)
+    monkeypatch.setattr(service._adaptive, 'submit', lambda *args, **kwargs: None)
+    raw = np.arange(48).reshape(16, 3) + 10000.12345678
+    def source(request):
+        service._publish_chunk(raw, 0)
+        service._stop_event.set()
+    monkeypatch.setattr(service, '_run_demo', source)
+    service.start(web.StartRequest(save_raw_data=True))
+    service._thread.join(5)
+    assert not service._thread.is_alive()
+    status = service.status().as_dict()['recording']
+    assert status['complete'] is True
+    assert status['samples_written'] == 3
+    saved = np.loadtxt(Path(status['path']) / 'raw_eeg.csv', delimiter=',', skiprows=1,
+                       usecols=range(5, 21))
+    np.testing.assert_array_equal(saved.T, raw)
+
+
+def test_disabled_raw_recording_creates_no_files(tmp_path, monkeypatch):
+    service = web.AcquisitionService()
+    monkeypatch.setattr(web, 'RawRecording', lambda metadata: pytest.fail('Saving is disabled'))
+    monkeypatch.setattr(service._adaptive, 'start', lambda *args, **kwargs: 1)
+    monkeypatch.setattr(service._adaptive, 'stop', lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, '_run_demo', lambda request: service._stop_event.set())
+    service.start(web.StartRequest(save_raw_data=False))
+    service._thread.join(5)
+    assert service.status().as_dict()['recording'] is None
+
+
+def test_start_failure_closes_raw_writer(tmp_path, monkeypatch):
+    from raw_recording import RawRecording
+    monkeypatch.setattr(web, 'RawRecording', lambda metadata: RawRecording(metadata, tmp_path))
+    service = web.AcquisitionService()
+    def fail(*args, **kwargs):
+        raise RuntimeError('setup failed')
+    monkeypatch.setattr(service._adaptive, 'start', fail)
+    monkeypatch.setattr(service._adaptive, 'stop', lambda *args, **kwargs: None)
+    with pytest.raises(RuntimeError, match='setup failed'):
+        service.start(web.StartRequest(save_raw_data=True))
+    assert not service.status().streaming
+    assert not service._recording.thread.is_alive()
+    assert service._recording.status()['samples_written'] == 0
 
 
 def test_display_filter_is_stateful_and_does_not_change_inference_input():

@@ -82,5 +82,6 @@ backEnd/music/
 
 # Local device run exports (may contain raw or identifiable EEG records)
 backEnd/session_reports/
+backEnd/recordings/
 eeg_sleep_output_*/
 eeg_focus_balanced_output_*/

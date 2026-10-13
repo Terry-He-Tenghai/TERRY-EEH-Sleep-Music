@@ -123,7 +123,7 @@ def test_cooldown_retries_new_target_on_next_valid_window(monkeypatch):
     assert automatic.status()['music_state'] == 'M2'
 
 
-def test_two_distinct_valid_n2_predictions_pause_until_valid_non_n2():
+def test_three_distinct_valid_n2_predictions_pause_until_valid_non_n2():
     automatic = ace.AutomaticMusic()
     automatic.start(63, 'ambient')
     automatic.cached['M1'] = '/api/ace/generations/m1_track/audio'
@@ -137,6 +137,8 @@ def test_two_distinct_valid_n2_predictions_pause_until_valid_non_n2():
     automatic.consider(n2)
     assert automatic.status()['status'] == 'ready'
     automatic.consider({**n2, 'sequence': 3})
+    assert automatic.status()['status'] == 'ready'
+    automatic.consider({**n2, 'sequence': 4})
     assert automatic.status()['status'] == 'sleep_paused'
     assert automatic.status()['audio_url'] is None
     automatic.consider({**n2, 'sequence': 4})
@@ -158,5 +160,7 @@ def test_bad_quality_breaks_n2_streak_without_resuming_sleep_pause():
     automatic.consider({**n2, 'sequence': 3})
     assert automatic.status()['status'] == 'ready'
     automatic.consider({**n2, 'sequence': 4})
-    automatic.consider({**n2, 'sequence': 5, 'status': 'frozen', 'signal_quality': 0})
+    assert automatic.status()['status'] == 'ready'
+    automatic.consider({**n2, 'sequence': 5})
+    automatic.consider({**n2, 'sequence': 6, 'status': 'frozen', 'signal_quality': 0})
     assert automatic.status()['status'] == 'sleep_paused'

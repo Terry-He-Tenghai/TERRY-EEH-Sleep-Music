@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { ref, computed, watch, reactive } from 'vue'
+import { text as t, setLanguage } from '../i18n.js'
+import { analyzeUpload } from '../audio/uploadLoudness.js'
 import { parse, compileScript, compileTemplate } from 'vue/compiler-sfc'
 import { liveClassification, isFreshLiveEvent, canPlayAutomatic, canContinueAutomatic, musicStateLabels, waveformStatus, waveformCollection, waveformHoldReasons } from '../audio/liveClassification.js'
 
@@ -71,7 +73,8 @@ test('App and automatic panel compile with research-only waveform labels', () =>
 function harness(fetcher, decode = async () => ({})) {
   let time = now, interval, cleanup
   const nodes = []
-  const param = () => ({ value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, cancelScheduledValues() {} })
+  const param = () => ({ value: 0, ramps: [], setValueAtTime() {},
+    linearRampToValueAtTime(value, time) { this.ramps.push({ value, time }) }, cancelScheduledValues() {} })
   class AudioContext {
     currentTime = 0
     destination = {}
@@ -79,7 +82,8 @@ function harness(fetcher, decode = async () => ({})) {
     close() {}
     createGain() { return { gain: param(), connect() {}, disconnect() {} } }
     createBufferSource() {
-      const node = { connect() {}, disconnect() {}, start() { this.started = true }, stop() { this.stopped = true } }
+      const node = { connect() {}, disconnect() {}, start() { this.started = true },
+        stop(time) { this.stopped = true; this.stopTime = time } }
       nodes.push(node); return node
     }
     decodeAudioData(data) { return decode(data) }
@@ -88,7 +92,7 @@ function harness(fetcher, decode = async () => ({})) {
   const script = 'const recordOutput = () => {}, logEvidence = () => {};\n' + parse(panel).descriptor.scriptSetup.content.replace(/^import .*$/gm, '').replace('import.meta.env.VITE_API_BASE', "''")
   // Execute the actual script-setup functions with mocked browser/audio/timer APIs.
   const names = ['ref', 'computed', 'watch', 'onBeforeUnmount', 'defineProps', 'defineExpose', 'window', 'fetch',
-    'setInterval', 'clearInterval', 'Date', 'canPlayAutomatic', 'canContinueAutomatic', 'liveClassification', 'musicStateLabels', 'waveformCollection', 'waveformHoldReasons', 'waveformStatus']
+    'setInterval', 'clearInterval', 'Date', 'canPlayAutomatic', 'canContinueAutomatic', 'liveClassification', 'musicStateLabels', 'waveformCollection', 'waveformHoldReasons', 'waveformStatus', 't', 'analyzeUpload']
   const fakeDate = { now: () => time }
   const exposed = new Function(...names, `${script}\nreturn { arm, stop, refresh, classifiedStage, lastClassification, hasCurrentClassification }`)(
     ref, computed, watch, fn => { cleanup = fn }, () => props, () => {}, { AudioContext }, fetcher,
@@ -96,12 +100,45 @@ function harness(fetcher, decode = async () => ({})) {
     (event, timestamp = time) => canPlayAutomatic(event, timestamp),
     (event, session, timestamp = time) => canContinueAutomatic(event, session, timestamp),
     liveClassification, musicStateLabels, waveformCollection, waveformHoldReasons,
-    (event, timestamp = time) => waveformStatus(event, timestamp))
+    (event, timestamp = time) => waveformStatus(event, timestamp), t, analyzeUpload)
   return { ...exposed, props, nodes, tick: () => interval(), setTime: value => { time = value }, cleanup: () => cleanup() }
 }
 const statusResponse = { ok: true, json: async () => ({ status: 'ready', session_id: '1', audio_url: '/audio.wav' }) }
 const audioResponse = { ok: true, arrayBuffer: async () => new ArrayBuffer(1) }
 const settle = () => new Promise(resolve => setImmediate(resolve))
+
+test('loud generated music is attenuated before its gradual start', async () => {
+  let calls = 0
+  const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse,
+    async () => ({ numberOfChannels: 1, getChannelData: () => Float32Array.from([.8, -.8]) }))
+  try {
+    await h.arm()
+    await new Promise(resolve => setTimeout(resolve, 30))
+    assert.equal(h.nodes.length, 1)
+    assert.ok(h.nodes[0].fadeGain.gain.ramps[0].value <= .151)
+    assert.equal(h.nodes[0].fadeGain.gain.ramps[0].time, 8)
+  } finally { h.cleanup() }
+})
+
+test('new ACE stage crossfades both tracks over eight seconds', async () => {
+  let calls = 0
+  const h = harness(async () => {
+    ++calls
+    if (calls % 2 === 0) return audioResponse
+    return { ok: true, json: async () => ({ status: 'ready', session_id: '1',
+      audio_url: calls === 1 ? '/w.wav' : '/n1.wav', music_state: calls === 1 ? 'M1' : 'M2' }) }
+  })
+  try {
+    await h.arm(); await settle()
+    const previous = h.nodes[0]
+    assert.deepEqual(previous.fadeGain.gain.ramps, [{ value: 1, time: 8 }])
+    await h.tick(); await settle()
+    assert.equal(h.nodes.length, 2)
+    assert.deepEqual(h.nodes[1].fadeGain.gain.ramps, [{ value: 1, time: 8 }])
+    assert.deepEqual(previous.fadeGain.gain.ramps.at(-1), { value: 0, time: 8 })
+    assert.equal(previous.stopTime, 8)
+  } finally { h.cleanup() }
+})
 
 test('panel displays inferred W/N1/N2 separately from M music plans and labels history honestly', () => {
   const h = harness(async () => statusResponse)
@@ -182,7 +219,7 @@ test('paused backend generation status does not silence already looping ACE audi
   } finally { h.cleanup() }
 })
 
-test('two-N2 sleep pause event immediately silences looping ACE audio', async () => {
+test('three-N2 sleep pause fades looping ACE audio over 30 seconds without restarting the fade', async () => {
   let calls = 0
   const h = harness(async () => ++calls % 2 ? statusResponse : audioResponse)
   try {
@@ -190,9 +227,24 @@ test('two-N2 sleep pause event immediately silences looping ACE audio', async ()
     assert.equal(h.nodes[0].started, true)
     h.props.event = { ...ready(), ace_sleep_paused: true }
     assert.equal(h.nodes[0].stopped, true)
+    assert.equal(h.nodes[0].stopTime, 30)
+    const ramps = h.nodes[0].fadeGain.gain.ramps.length
     await h.tick()
+    assert.equal(h.nodes[0].fadeGain.gain.ramps.length, ramps)
     assert.equal(calls, 2, 'sleep pause cannot authorize another audio request')
   } finally { h.cleanup() }
+})
+
+test('live status and classification react to language changes', () => {
+  const h = harness(async () => statusResponse)
+  try {
+    setLanguage('en')
+    assert.equal(h.classifiedStage.value, 'N2 (Sleep stage 2)')
+    assert.equal(waveformCollection(ready()), '40.0 / 40 s')
+    for (const reason of Object.keys(waveformHoldReasons)) {
+      assert.doesNotMatch(waveformStatus({ ...ready(), reason }, now), /\p{Script=Han}/u)
+    }
+  } finally { setLanguage('zh'); h.cleanup() }
 })
 
 test('stale events never grant new playback and explicit terminal states revoke continuation', () => {

@@ -63,6 +63,7 @@ class FrontalContractTests(unittest.TestCase):
                 "units": ["uV"] * 8}
         self.assertEqual(frontal.channel_selection(info, 6),
                          ["EEG " + c for c in frontal.MONTAGES[6]])
+        self.assertEqual(frontal.channel_selection(info, 2), ["EEG Fp1", "EEG Fp2"])
 
 
 if __name__ == "__main__":

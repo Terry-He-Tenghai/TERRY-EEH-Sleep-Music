@@ -11,6 +11,7 @@ test('selecting stem mode sends selected ID and plays projected conservative the
   await page.routeWebSocket('**/ws/waveform', () => {})
   await page.route('**/api/**', async route => {
     const path=new URL(route.request().url()).pathname
+    if(path==='/api/acquisition/recording-info') return route.fulfill({json:{raw_recording_version:1}})
     if(path.startsWith('/api/stem-music')) { const response=await route.fetch({url:`http://127.0.0.1:8011${path}`}); return route.fulfill({response}) }
     if(path==='/api/acquisition/start') { selected=route.request().postDataJSON(); started=true; return route.fulfill({json:{streaming:true,connected:true,sample_rate_hz:250,samples_emitted:0}}) }
     if(path==='/api/adaptive/status') return route.fulfill({json:frame()})
