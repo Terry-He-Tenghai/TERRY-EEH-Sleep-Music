@@ -1,0 +1,10 @@
+{
+  "version": "cap-waveform-five-stage-v1",
+  "classes": [
+    "W",
+    "N1",
+    "N2",
+    "N3",
+    "REM"
+  ]
+}

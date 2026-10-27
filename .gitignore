@@ -97,6 +97,20 @@ terry/results/waveform_frontal_v1/cap6/*
 !terry/results/waveform_frontal_v1/cap2/best.pt
 !terry/results/waveform_frontal_v1/cap4/best.pt
 !terry/results/waveform_frontal_v1/cap6/best.pt
+# Five-stage checkpoints and compact evaluation metadata only.
+!terry/results/waveform_five_stage_v1/
+terry/results/waveform_five_stage_v1/*
+!terry/results/waveform_five_stage_v1/five_stage_run.json
+!terry/results/waveform_five_stage_v1/split.json
+!terry/results/waveform_five_stage_v1/comparison.json
+!terry/results/waveform_five_stage_v1/frontal[246]/
+!terry/results/waveform_five_stage_v1/cap8/
+!terry/results/waveform_five_stage_v1/cap16/
+terry/results/waveform_five_stage_v1/*/*
+!terry/results/waveform_five_stage_v1/*/best.pt
+!terry/results/waveform_five_stage_v1/*/input_contract.json
+!terry/results/waveform_five_stage_v1/*/report.json
+!terry/results/waveform_five_stage_v1/*/training_summary.json
 terry/backEnd/results/raw_data/
 terry/backEnd/results/figures/*.png
 terry/backEnd/results/figures/*.pdf

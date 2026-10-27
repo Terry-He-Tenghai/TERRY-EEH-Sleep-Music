@@ -1,0 +1,58 @@
+{
+  "architecture": "build_model:cap-waveform-five-stage-v1",
+  "classes": [
+    "W",
+    "N1",
+    "N2",
+    "N3",
+    "REM"
+  ],
+  "channels": [
+    "Fp1",
+    "Fp2"
+  ],
+  "pipeline": {
+    "version": "cap-waveform-five-stage-v1",
+    "channels": [
+      "Fp1",
+      "Fp2"
+    ],
+    "classes": [
+      "W",
+      "N1",
+      "N2",
+      "N3",
+      "REM"
+    ],
+    "sample_rate_hz": 250,
+    "window_seconds": 30,
+    "past_context_seconds": 10,
+    "resampling": "scipy.resample_poly, default Kaiser window; context+epoch buffer only",
+    "filter": "causal scipy SOS: iirnotch(50Hz,Q30), butter(4,[0.5,35]Hz)",
+    "filter_initialization": "zero-state per 40-second context+epoch buffer; discard first 10 seconds",
+    "reference": "selected montage average after temporal filtering",
+    "input_unit": "uV",
+    "input_scale_uv": 100.0,
+    "normalization": "divide referenced uV by 100; no subject/night fitted statistics",
+    "qc": {
+      "maximum_filtered_ptp_uv": 500.0,
+      "minimum_filtered_std_uv": 0.1,
+      "flat_second_std_uv": 0.1,
+      "max_flat_seconds": 2,
+      "require_all_16_clean": false,
+      "required_clean_channels": [
+        "Fp1",
+        "Fp2"
+      ],
+      "scope": "selected electrodes only, before average reference"
+    },
+    "scope": "Manual W/N1/N2/N3/R labels; R and REM map to REM; L excluded.",
+    "deployment": "research_only; real-device reference and domain validation pending"
+  },
+  "output_shape": [
+    null,
+    5
+  ],
+  "deployment_ready": false,
+  "hardware_reference_verified": false
+}

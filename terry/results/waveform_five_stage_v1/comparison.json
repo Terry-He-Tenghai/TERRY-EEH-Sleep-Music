@@ -1,0 +1,3565 @@
+{
+  "frontal2": {
+    "settings": {
+      "seed": 42,
+      "epochs": 30,
+      "patience": 7,
+      "batch_size": 32,
+      "dataset_fingerprint": "a74310782d3ed1d8592319e600dfcdacf053fae3a4ee7d58f04114e6b63dcadf"
+    },
+    "best_epoch": 14,
+    "best_validation_macro_f1": 0.7128565729050427,
+    "training_seconds": 69.5,
+    "training_class_counts": [
+      2337,
+      1377,
+      5684,
+      2412,
+      1736
+    ],
+    "device": "cuda",
+    "epochs_completed": 21,
+    "classes": [
+      "W",
+      "N1",
+      "N2",
+      "N3",
+      "REM"
+    ],
+    "channels": [
+      "Fp1",
+      "Fp2"
+    ],
+    "pipeline": {
+      "version": "cap-waveform-five-stage-v1",
+      "channels": [
+        "Fp1",
+        "Fp2"
+      ],
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "sample_rate_hz": 250,
+      "window_seconds": 30,
+      "past_context_seconds": 10,
+      "resampling": "scipy.resample_poly, default Kaiser window; context+epoch buffer only",
+      "filter": "causal scipy SOS: iirnotch(50Hz,Q30), butter(4,[0.5,35]Hz)",
+      "filter_initialization": "zero-state per 40-second context+epoch buffer; discard first 10 seconds",
+      "reference": "selected montage average after temporal filtering",
+      "input_unit": "uV",
+      "input_scale_uv": 100.0,
+      "normalization": "divide referenced uV by 100; no subject/night fitted statistics",
+      "qc": {
+        "maximum_filtered_ptp_uv": 500.0,
+        "minimum_filtered_std_uv": 0.1,
+        "flat_second_std_uv": 0.1,
+        "max_flat_seconds": 2,
+        "require_all_16_clean": false,
+        "required_clean_channels": [
+          "Fp1",
+          "Fp2"
+        ],
+        "scope": "selected electrodes only, before average reference"
+      },
+      "scope": "Manual W/N1/N2/N3/R labels; R and REM map to REM; L excluded.",
+      "deployment": "research_only; real-device reference and domain validation pending"
+    },
+    "subject_split": {
+      "test": [
+        "EPCTL07",
+        "EPCTL12",
+        "EPCTL18",
+        "EPCTL20",
+        "EPCTL23",
+        "EPCTL29"
+      ],
+      "validation": [
+        "EPCTL06",
+        "EPCTL11",
+        "EPCTL13",
+        "EPCTL14",
+        "EPCTL16",
+        "EPCTL26"
+      ],
+      "train": [
+        "EPCTL01",
+        "EPCTL02",
+        "EPCTL03",
+        "EPCTL04",
+        "EPCTL05",
+        "EPCTL09",
+        "EPCTL10",
+        "EPCTL15",
+        "EPCTL17",
+        "EPCTL19",
+        "EPCTL21",
+        "EPCTL22",
+        "EPCTL24",
+        "EPCTL25",
+        "EPCTL27",
+        "EPCTL28"
+      ]
+    },
+    "test": {
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "n_epochs": 4664,
+      "confusion_matrix": [
+        [
+          714,
+          66,
+          20,
+          8,
+          117
+        ],
+        [
+          36,
+          174,
+          108,
+          9,
+          147
+        ],
+        [
+          11,
+          166,
+          1052,
+          390,
+          210
+        ],
+        [
+          3,
+          1,
+          62,
+          829,
+          4
+        ],
+        [
+          3,
+          72,
+          11,
+          0,
+          451
+        ]
+      ],
+      "accuracy": 0.6903945111492281,
+      "balanced_accuracy": 0.695228984552808,
+      "macro_f1": 0.6567336665794216,
+      "cohen_kappa": 0.6018341786483761,
+      "recall": {
+        "W": 0.7718918918918919,
+        "N1": 0.3670886075949367,
+        "N2": 0.5751776927282668,
+        "N3": 0.9221357063403782,
+        "REM": 0.839851024208566
+      },
+      "precision": {
+        "W": 0.9308996088657105,
+        "N1": 0.36325678496868474,
+        "N2": 0.839584996009577,
+        "N3": 0.6707119741100324,
+        "REM": 0.48546824542518835
+      },
+      "f1": {
+        "W": 0.8439716312056738,
+        "N1": 0.3651626442812172,
+        "N2": 0.6826735885788449,
+        "N3": 0.7765807962529274,
+        "REM": 0.6152796725784447
+      },
+      "support": {
+        "W": 925,
+        "N1": 474,
+        "N2": 1829,
+        "N3": 899,
+        "REM": 537
+      },
+      "brier_score": 0.43155220944573836,
+      "ece_10_bins": 0.0974188915567271,
+      "probabilities_calibrated": false
+    },
+    "per_subject": {
+      "EPCTL07": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 888,
+        "confusion_matrix": [
+          [
+            71,
+            7,
+            1,
+            3,
+            31
+          ],
+          [
+            1,
+            23,
+            13,
+            0,
+            58
+          ],
+          [
+            0,
+            85,
+            131,
+            18,
+            161
+          ],
+          [
+            0,
+            0,
+            23,
+            158,
+            0
+          ],
+          [
+            0,
+            12,
+            0,
+            0,
+            92
+          ]
+        ],
+        "accuracy": 0.5349099099099099,
+        "balanced_accuracy": 0.5919225956519818,
+        "macro_f1": 0.5460945454291479,
+        "cohen_kappa": 0.42155403018220367,
+        "recall": {
+          "W": 0.6283185840707964,
+          "N1": 0.24210526315789474,
+          "N2": 0.33164556962025316,
+          "N3": 0.8729281767955801,
+          "REM": 0.8846153846153846
+        },
+        "precision": {
+          "W": 0.9861111111111112,
+          "N1": 0.18110236220472442,
+          "N2": 0.7797619047619048,
+          "N3": 0.88268156424581,
+          "REM": 0.26900584795321636
+        },
+        "f1": {
+          "W": 0.7675675675675676,
+          "N1": 0.2072072072072072,
+          "N2": 0.46536412078152756,
+          "N3": 0.8777777777777778,
+          "REM": 0.4125560538116592
+        },
+        "support": {
+          "W": 113,
+          "N1": 95,
+          "N2": 395,
+          "N3": 181,
+          "REM": 104
+        },
+        "brier_score": 0.5908384474347417,
+        "ece_10_bins": 0.16463472368615167,
+        "probabilities_calibrated": false
+      },
+      "EPCTL12": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 748,
+        "confusion_matrix": [
+          [
+            160,
+            1,
+            2,
+            0,
+            2
+          ],
+          [
+            15,
+            15,
+            22,
+            0,
+            22
+          ],
+          [
+            2,
+            24,
+            198,
+            16,
+            14
+          ],
+          [
+            1,
+            1,
+            20,
+            148,
+            4
+          ],
+          [
+            2,
+            1,
+            1,
+            0,
+            77
+          ]
+        ],
+        "accuracy": 0.7994652406417112,
+        "balanced_accuracy": 0.7506238456098172,
+        "macro_f1": 0.7257354501228546,
+        "cohen_kappa": 0.7371127861124323,
+        "recall": {
+          "W": 0.9696969696969697,
+          "N1": 0.20270270270270271,
+          "N2": 0.7795275590551181,
+          "N3": 0.8505747126436781,
+          "REM": 0.9506172839506173
+        },
+        "precision": {
+          "W": 0.8888888888888888,
+          "N1": 0.35714285714285715,
+          "N2": 0.8148148148148148,
+          "N3": 0.9024390243902439,
+          "REM": 0.6470588235294118
+        },
+        "f1": {
+          "W": 0.927536231884058,
+          "N1": 0.25862068965517243,
+          "N2": 0.7967806841046278,
+          "N3": 0.8757396449704142,
+          "REM": 0.77
+        },
+        "support": {
+          "W": 165,
+          "N1": 74,
+          "N2": 254,
+          "N3": 174,
+          "REM": 81
+        },
+        "brier_score": 0.28379658563106397,
+        "ece_10_bins": 0.02771221248701935,
+        "probabilities_calibrated": false
+      },
+      "EPCTL18": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 471,
+        "confusion_matrix": [
+          [
+            143,
+            3,
+            0,
+            1,
+            17
+          ],
+          [
+            7,
+            25,
+            4,
+            0,
+            3
+          ],
+          [
+            0,
+            3,
+            79,
+            54,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            97,
+            0
+          ],
+          [
+            0,
+            10,
+            2,
+            0,
+            23
+          ]
+        ],
+        "accuracy": 0.7791932059447984,
+        "balanced_accuracy": 0.750200414124374,
+        "macro_f1": 0.7239240415563166,
+        "cohen_kappa": 0.7081384471468664,
+        "recall": {
+          "W": 0.8719512195121951,
+          "N1": 0.6410256410256411,
+          "N2": 0.5808823529411765,
+          "N3": 1.0,
+          "REM": 0.6571428571428571
+        },
+        "precision": {
+          "W": 0.9533333333333334,
+          "N1": 0.6097560975609756,
+          "N2": 0.9294117647058824,
+          "N3": 0.6381578947368421,
+          "REM": 0.5348837209302325
+        },
+        "f1": {
+          "W": 0.910828025477707,
+          "N1": 0.625,
+          "N2": 0.7149321266968326,
+          "N3": 0.7791164658634538,
+          "REM": 0.5897435897435898
+        },
+        "support": {
+          "W": 164,
+          "N1": 39,
+          "N2": 136,
+          "N3": 97,
+          "REM": 35
+        },
+        "brier_score": 0.33217703281950123,
+        "ece_10_bins": 0.08853064100960005,
+        "probabilities_calibrated": false
+      },
+      "EPCTL20": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 924,
+        "confusion_matrix": [
+          [
+            40,
+            15,
+            6,
+            0,
+            8
+          ],
+          [
+            1,
+            56,
+            20,
+            0,
+            17
+          ],
+          [
+            0,
+            17,
+            364,
+            89,
+            2
+          ],
+          [
+            0,
+            0,
+            10,
+            139,
+            0
+          ],
+          [
+            0,
+            22,
+            4,
+            0,
+            114
+          ]
+        ],
+        "accuracy": 0.7716450216450217,
+        "balanced_accuracy": 0.7387625773565099,
+        "macro_f1": 0.7312261988572435,
+        "cohen_kappa": 0.6729927692898608,
+        "recall": {
+          "W": 0.5797101449275363,
+          "N1": 0.5957446808510638,
+          "N2": 0.7711864406779662,
+          "N3": 0.9328859060402684,
+          "REM": 0.8142857142857143
+        },
+        "precision": {
+          "W": 0.975609756097561,
+          "N1": 0.509090909090909,
+          "N2": 0.900990099009901,
+          "N3": 0.6096491228070176,
+          "REM": 0.8085106382978723
+        },
+        "f1": {
+          "W": 0.7272727272727273,
+          "N1": 0.5490196078431373,
+          "N2": 0.8310502283105022,
+          "N3": 0.7374005305039788,
+          "REM": 0.8113879003558719
+        },
+        "support": {
+          "W": 69,
+          "N1": 94,
+          "N2": 472,
+          "N3": 149,
+          "REM": 140
+        },
+        "brier_score": 0.32623124564405925,
+        "ece_10_bins": 0.05463482700772098,
+        "probabilities_calibrated": false
+      },
+      "EPCTL23": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 816,
+        "confusion_matrix": [
+          [
+            130,
+            22,
+            1,
+            0,
+            58
+          ],
+          [
+            5,
+            34,
+            27,
+            0,
+            38
+          ],
+          [
+            5,
+            33,
+            182,
+            46,
+            33
+          ],
+          [
+            2,
+            0,
+            9,
+            111,
+            0
+          ],
+          [
+            1,
+            13,
+            0,
+            0,
+            66
+          ]
+        ],
+        "accuracy": 0.6409313725490197,
+        "balanced_accuracy": 0.6573137077493181,
+        "macro_f1": 0.6085923983297369,
+        "cohen_kappa": 0.5444554530904657,
+        "recall": {
+          "W": 0.6161137440758294,
+          "N1": 0.3269230769230769,
+          "N2": 0.6086956521739131,
+          "N3": 0.9098360655737705,
+          "REM": 0.825
+        },
+        "precision": {
+          "W": 0.9090909090909091,
+          "N1": 0.3333333333333333,
+          "N2": 0.8310502283105022,
+          "N3": 0.7070063694267515,
+          "REM": 0.3384615384615385
+        },
+        "f1": {
+          "W": 0.7344632768361582,
+          "N1": 0.3300970873786408,
+          "N2": 0.7027027027027027,
+          "N3": 0.7956989247311828,
+          "REM": 0.48
+        },
+        "support": {
+          "W": 211,
+          "N1": 104,
+          "N2": 299,
+          "N3": 122,
+          "REM": 80
+        },
+        "brier_score": 0.49823936103459704,
+        "ece_10_bins": 0.08744673657358862,
+        "probabilities_calibrated": false
+      },
+      "EPCTL29": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 817,
+        "confusion_matrix": [
+          [
+            170,
+            18,
+            10,
+            4,
+            1
+          ],
+          [
+            7,
+            21,
+            22,
+            9,
+            9
+          ],
+          [
+            4,
+            4,
+            98,
+            167,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            176,
+            0
+          ],
+          [
+            0,
+            14,
+            4,
+            0,
+            79
+          ]
+        ],
+        "accuracy": 0.6658506731946144,
+        "balanced_accuracy": 0.6639338603444331,
+        "macro_f1": 0.6428211298337784,
+        "cohen_kappa": 0.5702477268742329,
+        "recall": {
+          "W": 0.8374384236453202,
+          "N1": 0.3088235294117647,
+          "N2": 0.358974358974359,
+          "N3": 1.0,
+          "REM": 0.8144329896907216
+        },
+        "precision": {
+          "W": 0.9392265193370166,
+          "N1": 0.3684210526315789,
+          "N2": 0.7313432835820896,
+          "N3": 0.4943820224719101,
+          "REM": 0.8876404494382022
+        },
+        "f1": {
+          "W": 0.8854166666666666,
+          "N1": 0.336,
+          "N2": 0.48157248157248156,
+          "N3": 0.6616541353383458,
+          "REM": 0.8494623655913979
+        },
+        "support": {
+          "W": 203,
+          "N1": 68,
+          "N2": 273,
+          "N3": 176,
+          "REM": 97
+        },
+        "brier_score": 0.5034990764302453,
+        "ece_10_bins": 0.17401656362534734,
+        "probabilities_calibrated": false
+      }
+    },
+    "cpu_contract_validation": {
+      "output_shape": [
+        1,
+        5
+      ],
+      "finite_logits": true,
+      "strict_state_dict": true
+    },
+    "environment": {
+      "python": "3.12.4",
+      "torch": "2.6.0+cu124",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "mne": "1.10.2"
+    }
+  },
+  "frontal4": {
+    "settings": {
+      "seed": 42,
+      "epochs": 30,
+      "patience": 7,
+      "batch_size": 32,
+      "dataset_fingerprint": "bce15b57cd314c4b441c6c649da6e9a1152056d08abaadc9f8f1ff11dd930fec"
+    },
+    "best_epoch": 10,
+    "best_validation_macro_f1": 0.7694694923604332,
+    "training_seconds": 79.23500000000058,
+    "training_class_counts": [
+      2336,
+      1377,
+      5684,
+      2412,
+      1736
+    ],
+    "device": "cuda",
+    "epochs_completed": 17,
+    "classes": [
+      "W",
+      "N1",
+      "N2",
+      "N3",
+      "REM"
+    ],
+    "channels": [
+      "Fp1",
+      "Fp2",
+      "F3",
+      "F4"
+    ],
+    "pipeline": {
+      "version": "cap-waveform-five-stage-v1",
+      "channels": [
+        "Fp1",
+        "Fp2",
+        "F3",
+        "F4"
+      ],
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "sample_rate_hz": 250,
+      "window_seconds": 30,
+      "past_context_seconds": 10,
+      "resampling": "scipy.resample_poly, default Kaiser window; context+epoch buffer only",
+      "filter": "causal scipy SOS: iirnotch(50Hz,Q30), butter(4,[0.5,35]Hz)",
+      "filter_initialization": "zero-state per 40-second context+epoch buffer; discard first 10 seconds",
+      "reference": "selected montage average after temporal filtering",
+      "input_unit": "uV",
+      "input_scale_uv": 100.0,
+      "normalization": "divide referenced uV by 100; no subject/night fitted statistics",
+      "qc": {
+        "maximum_filtered_ptp_uv": 500.0,
+        "minimum_filtered_std_uv": 0.1,
+        "flat_second_std_uv": 0.1,
+        "max_flat_seconds": 2,
+        "require_all_16_clean": false,
+        "required_clean_channels": [
+          "Fp1",
+          "Fp2",
+          "F3",
+          "F4"
+        ],
+        "scope": "selected electrodes only, before average reference"
+      },
+      "scope": "Manual W/N1/N2/N3/R labels; R and REM map to REM; L excluded.",
+      "deployment": "research_only; real-device reference and domain validation pending"
+    },
+    "subject_split": {
+      "test": [
+        "EPCTL07",
+        "EPCTL12",
+        "EPCTL18",
+        "EPCTL20",
+        "EPCTL23",
+        "EPCTL29"
+      ],
+      "validation": [
+        "EPCTL06",
+        "EPCTL11",
+        "EPCTL13",
+        "EPCTL14",
+        "EPCTL16",
+        "EPCTL26"
+      ],
+      "train": [
+        "EPCTL01",
+        "EPCTL02",
+        "EPCTL03",
+        "EPCTL04",
+        "EPCTL05",
+        "EPCTL09",
+        "EPCTL10",
+        "EPCTL15",
+        "EPCTL17",
+        "EPCTL19",
+        "EPCTL21",
+        "EPCTL22",
+        "EPCTL24",
+        "EPCTL25",
+        "EPCTL27",
+        "EPCTL28"
+      ]
+    },
+    "test": {
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "n_epochs": 4659,
+      "confusion_matrix": [
+        [
+          753,
+          128,
+          12,
+          5,
+          22
+        ],
+        [
+          48,
+          229,
+          114,
+          0,
+          83
+        ],
+        [
+          12,
+          233,
+          1350,
+          171,
+          63
+        ],
+        [
+          1,
+          4,
+          119,
+          774,
+          1
+        ],
+        [
+          61,
+          98,
+          7,
+          2,
+          369
+        ]
+      ],
+      "accuracy": 0.7458682120626744,
+      "balanced_accuracy": 0.7175632672140159,
+      "macro_f1": 0.7083104016506325,
+      "cohen_kappa": 0.6656502688341658,
+      "recall": {
+        "W": 0.8184782608695652,
+        "N1": 0.4831223628691983,
+        "N2": 0.7381082558775287,
+        "N3": 0.8609566184649611,
+        "REM": 0.6871508379888268
+      },
+      "precision": {
+        "W": 0.8605714285714285,
+        "N1": 0.3309248554913295,
+        "N2": 0.8426966292134831,
+        "N3": 0.8130252100840336,
+        "REM": 0.6858736059479554
+      },
+      "f1": {
+        "W": 0.8389972144846797,
+        "N1": 0.3927958833619211,
+        "N2": 0.7869425823375109,
+        "N3": 0.8363047001620746,
+        "REM": 0.6865116279069767
+      },
+      "support": {
+        "W": 920,
+        "N1": 474,
+        "N2": 1829,
+        "N3": 899,
+        "REM": 537
+      },
+      "brier_score": 0.346297947199458,
+      "ece_10_bins": 0.059676195321919236,
+      "probabilities_calibrated": false
+    },
+    "per_subject": {
+      "EPCTL07": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 888,
+        "confusion_matrix": [
+          [
+            97,
+            3,
+            1,
+            2,
+            10
+          ],
+          [
+            4,
+            28,
+            14,
+            0,
+            49
+          ],
+          [
+            1,
+            129,
+            185,
+            18,
+            62
+          ],
+          [
+            0,
+            0,
+            38,
+            143,
+            0
+          ],
+          [
+            0,
+            2,
+            0,
+            0,
+            102
+          ]
+        ],
+        "accuracy": 0.625,
+        "balanced_accuracy": 0.6784645663038086,
+        "macro_f1": 0.6319982282766226,
+        "cohen_kappa": 0.5191202801001101,
+        "recall": {
+          "W": 0.8584070796460177,
+          "N1": 0.29473684210526313,
+          "N2": 0.46835443037974683,
+          "N3": 0.7900552486187845,
+          "REM": 0.9807692307692307
+        },
+        "precision": {
+          "W": 0.9509803921568627,
+          "N1": 0.1728395061728395,
+          "N2": 0.7773109243697479,
+          "N3": 0.8773006134969326,
+          "REM": 0.45739910313901344
+        },
+        "f1": {
+          "W": 0.9023255813953488,
+          "N1": 0.2178988326848249,
+          "N2": 0.584518167456556,
+          "N3": 0.8313953488372093,
+          "REM": 0.6238532110091743
+        },
+        "support": {
+          "W": 113,
+          "N1": 95,
+          "N2": 395,
+          "N3": 181,
+          "REM": 104
+        },
+        "brier_score": 0.4820539307748471,
+        "ece_10_bins": 0.1221779206985826,
+        "probabilities_calibrated": false
+      },
+      "EPCTL12": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 748,
+        "confusion_matrix": [
+          [
+            152,
+            9,
+            3,
+            1,
+            0
+          ],
+          [
+            4,
+            36,
+            33,
+            0,
+            1
+          ],
+          [
+            1,
+            14,
+            227,
+            11,
+            1
+          ],
+          [
+            0,
+            3,
+            35,
+            135,
+            1
+          ],
+          [
+            2,
+            29,
+            4,
+            2,
+            44
+          ]
+        ],
+        "accuracy": 0.7941176470588235,
+        "balanced_accuracy": 0.724094268121782,
+        "macro_f1": 0.7429190633170668,
+        "cohen_kappa": 0.7257947030902607,
+        "recall": {
+          "W": 0.9212121212121213,
+          "N1": 0.4864864864864865,
+          "N2": 0.8937007874015748,
+          "N3": 0.7758620689655172,
+          "REM": 0.5432098765432098
+        },
+        "precision": {
+          "W": 0.9559748427672956,
+          "N1": 0.3956043956043956,
+          "N2": 0.7516556291390728,
+          "N3": 0.9060402684563759,
+          "REM": 0.9361702127659575
+        },
+        "f1": {
+          "W": 0.9382716049382716,
+          "N1": 0.43636363636363634,
+          "N2": 0.8165467625899281,
+          "N3": 0.8359133126934984,
+          "REM": 0.6875
+        },
+        "support": {
+          "W": 165,
+          "N1": 74,
+          "N2": 254,
+          "N3": 174,
+          "REM": 81
+        },
+        "brier_score": 0.28287583414232315,
+        "ece_10_bins": 0.04866536288337908,
+        "probabilities_calibrated": false
+      },
+      "EPCTL18": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 467,
+        "confusion_matrix": [
+          [
+            154,
+            1,
+            0,
+            0,
+            5
+          ],
+          [
+            6,
+            26,
+            2,
+            0,
+            5
+          ],
+          [
+            2,
+            1,
+            125,
+            8,
+            0
+          ],
+          [
+            0,
+            0,
+            15,
+            82,
+            0
+          ],
+          [
+            0,
+            8,
+            1,
+            0,
+            26
+          ]
+        ],
+        "accuracy": 0.8843683083511777,
+        "balanced_accuracy": 0.8273004562649803,
+        "macro_f1": 0.8310624267849571,
+        "cohen_kappa": 0.843683946270618,
+        "recall": {
+          "W": 0.9625,
+          "N1": 0.6666666666666666,
+          "N2": 0.9191176470588235,
+          "N3": 0.845360824742268,
+          "REM": 0.7428571428571429
+        },
+        "precision": {
+          "W": 0.9506172839506173,
+          "N1": 0.7222222222222222,
+          "N2": 0.8741258741258742,
+          "N3": 0.9111111111111111,
+          "REM": 0.7222222222222222
+        },
+        "f1": {
+          "W": 0.9565217391304348,
+          "N1": 0.6933333333333334,
+          "N2": 0.8960573476702509,
+          "N3": 0.8770053475935828,
+          "REM": 0.7323943661971831
+        },
+        "support": {
+          "W": 160,
+          "N1": 39,
+          "N2": 136,
+          "N3": 97,
+          "REM": 35
+        },
+        "brier_score": 0.18044517429866613,
+        "ece_10_bins": 0.022301151359362035,
+        "probabilities_calibrated": false
+      },
+      "EPCTL20": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 924,
+        "confusion_matrix": [
+          [
+            61,
+            5,
+            3,
+            0,
+            0
+          ],
+          [
+            19,
+            60,
+            14,
+            0,
+            1
+          ],
+          [
+            4,
+            27,
+            410,
+            31,
+            0
+          ],
+          [
+            0,
+            0,
+            22,
+            127,
+            0
+          ],
+          [
+            50,
+            36,
+            2,
+            0,
+            52
+          ]
+        ],
+        "accuracy": 0.7683982683982684,
+        "balanced_accuracy": 0.7229554951737381,
+        "macro_f1": 0.6792309593281766,
+        "cohen_kappa": 0.6640936085780684,
+        "recall": {
+          "W": 0.8840579710144928,
+          "N1": 0.6382978723404256,
+          "N2": 0.8686440677966102,
+          "N3": 0.8523489932885906,
+          "REM": 0.37142857142857144
+        },
+        "precision": {
+          "W": 0.4552238805970149,
+          "N1": 0.46875,
+          "N2": 0.9090909090909091,
+          "N3": 0.8037974683544303,
+          "REM": 0.9811320754716981
+        },
+        "f1": {
+          "W": 0.6009852216748769,
+          "N1": 0.5405405405405406,
+          "N2": 0.8884073672806068,
+          "N3": 0.8273615635179153,
+          "REM": 0.538860103626943
+        },
+        "support": {
+          "W": 69,
+          "N1": 94,
+          "N2": 472,
+          "N3": 149,
+          "REM": 140
+        },
+        "brier_score": 0.3262781542017575,
+        "ece_10_bins": 0.04451124366872756,
+        "probabilities_calibrated": false
+      },
+      "EPCTL23": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 815,
+        "confusion_matrix": [
+          [
+            115,
+            86,
+            4,
+            0,
+            5
+          ],
+          [
+            6,
+            42,
+            39,
+            0,
+            17
+          ],
+          [
+            4,
+            45,
+            223,
+            27,
+            0
+          ],
+          [
+            1,
+            1,
+            9,
+            111,
+            0
+          ],
+          [
+            1,
+            14,
+            0,
+            0,
+            65
+          ]
+        ],
+        "accuracy": 0.6822085889570552,
+        "balanced_accuracy": 0.6839241330064565,
+        "macro_f1": 0.6758913132836506,
+        "cohen_kappa": 0.5877101148087236,
+        "recall": {
+          "W": 0.5476190476190477,
+          "N1": 0.40384615384615385,
+          "N2": 0.745819397993311,
+          "N3": 0.9098360655737705,
+          "REM": 0.8125
+        },
+        "precision": {
+          "W": 0.905511811023622,
+          "N1": 0.22340425531914893,
+          "N2": 0.8109090909090909,
+          "N3": 0.8043478260869565,
+          "REM": 0.7471264367816092
+        },
+        "f1": {
+          "W": 0.6824925816023739,
+          "N1": 0.2876712328767123,
+          "N2": 0.7770034843205574,
+          "N3": 0.8538461538461538,
+          "REM": 0.7784431137724551
+        },
+        "support": {
+          "W": 210,
+          "N1": 104,
+          "N2": 299,
+          "N3": 122,
+          "REM": 80
+        },
+        "brier_score": 0.42686559664625706,
+        "ece_10_bins": 0.08551718285478697,
+        "probabilities_calibrated": false
+      },
+      "EPCTL29": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 817,
+        "confusion_matrix": [
+          [
+            174,
+            24,
+            1,
+            2,
+            2
+          ],
+          [
+            9,
+            37,
+            12,
+            0,
+            10
+          ],
+          [
+            0,
+            17,
+            180,
+            76,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            176,
+            0
+          ],
+          [
+            8,
+            9,
+            0,
+            0,
+            80
+          ]
+        ],
+        "accuracy": 0.791921664626683,
+        "balanced_accuracy": 0.7770686863167153,
+        "macro_f1": 0.7596731544736031,
+        "cohen_kappa": 0.7310850502339864,
+        "recall": {
+          "W": 0.8571428571428571,
+          "N1": 0.5441176470588235,
+          "N2": 0.6593406593406593,
+          "N3": 1.0,
+          "REM": 0.8247422680412371
+        },
+        "precision": {
+          "W": 0.9109947643979057,
+          "N1": 0.42528735632183906,
+          "N2": 0.9326424870466321,
+          "N3": 0.6929133858267716,
+          "REM": 0.8695652173913043
+        },
+        "f1": {
+          "W": 0.883248730964467,
+          "N1": 0.4774193548387097,
+          "N2": 0.7725321888412017,
+          "N3": 0.8186046511627907,
+          "REM": 0.8465608465608465
+        },
+        "support": {
+          "W": 203,
+          "N1": 68,
+          "N2": 273,
+          "N3": 176,
+          "REM": 97
+        },
+        "brier_score": 0.29388341418500885,
+        "ece_10_bins": 0.04119193349649156,
+        "probabilities_calibrated": false
+      }
+    },
+    "cpu_contract_validation": {
+      "output_shape": [
+        1,
+        5
+      ],
+      "finite_logits": true,
+      "strict_state_dict": true
+    },
+    "environment": {
+      "python": "3.12.4",
+      "torch": "2.6.0+cu124",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "mne": "1.10.2"
+    }
+  },
+  "frontal6": {
+    "settings": {
+      "seed": 42,
+      "epochs": 30,
+      "patience": 7,
+      "batch_size": 32,
+      "dataset_fingerprint": "e26b4e4cd97e96681f834b331cf2d447ca551a6b56cdf0e76f496aae78b96142"
+    },
+    "best_epoch": 11,
+    "best_validation_macro_f1": 0.7945306212649111,
+    "training_seconds": 82.51600000000326,
+    "training_class_counts": [
+      2277,
+      1362,
+      5618,
+      2410,
+      1724
+    ],
+    "device": "cuda",
+    "epochs_completed": 18,
+    "classes": [
+      "W",
+      "N1",
+      "N2",
+      "N3",
+      "REM"
+    ],
+    "channels": [
+      "Fp1",
+      "Fp2",
+      "F3",
+      "F4",
+      "F7",
+      "F8"
+    ],
+    "pipeline": {
+      "version": "cap-waveform-five-stage-v1",
+      "channels": [
+        "Fp1",
+        "Fp2",
+        "F3",
+        "F4",
+        "F7",
+        "F8"
+      ],
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "sample_rate_hz": 250,
+      "window_seconds": 30,
+      "past_context_seconds": 10,
+      "resampling": "scipy.resample_poly, default Kaiser window; context+epoch buffer only",
+      "filter": "causal scipy SOS: iirnotch(50Hz,Q30), butter(4,[0.5,35]Hz)",
+      "filter_initialization": "zero-state per 40-second context+epoch buffer; discard first 10 seconds",
+      "reference": "selected montage average after temporal filtering",
+      "input_unit": "uV",
+      "input_scale_uv": 100.0,
+      "normalization": "divide referenced uV by 100; no subject/night fitted statistics",
+      "qc": {
+        "maximum_filtered_ptp_uv": 500.0,
+        "minimum_filtered_std_uv": 0.1,
+        "flat_second_std_uv": 0.1,
+        "max_flat_seconds": 2,
+        "require_all_16_clean": false,
+        "required_clean_channels": [
+          "Fp1",
+          "Fp2",
+          "F3",
+          "F4",
+          "F7",
+          "F8"
+        ],
+        "scope": "selected electrodes only, before average reference"
+      },
+      "scope": "Manual W/N1/N2/N3/R labels; R and REM map to REM; L excluded.",
+      "deployment": "research_only; real-device reference and domain validation pending"
+    },
+    "subject_split": {
+      "test": [
+        "EPCTL07",
+        "EPCTL12",
+        "EPCTL18",
+        "EPCTL20",
+        "EPCTL23",
+        "EPCTL29"
+      ],
+      "validation": [
+        "EPCTL06",
+        "EPCTL11",
+        "EPCTL13",
+        "EPCTL14",
+        "EPCTL16",
+        "EPCTL26"
+      ],
+      "train": [
+        "EPCTL01",
+        "EPCTL02",
+        "EPCTL03",
+        "EPCTL04",
+        "EPCTL05",
+        "EPCTL09",
+        "EPCTL10",
+        "EPCTL15",
+        "EPCTL17",
+        "EPCTL19",
+        "EPCTL21",
+        "EPCTL22",
+        "EPCTL24",
+        "EPCTL25",
+        "EPCTL27",
+        "EPCTL28"
+      ]
+    },
+    "test": {
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "n_epochs": 4644,
+      "confusion_matrix": [
+        [
+          791,
+          71,
+          8,
+          2,
+          36
+        ],
+        [
+          47,
+          223,
+          96,
+          0,
+          106
+        ],
+        [
+          22,
+          293,
+          1359,
+          111,
+          43
+        ],
+        [
+          2,
+          3,
+          87,
+          805,
+          2
+        ],
+        [
+          13,
+          47,
+          5,
+          0,
+          472
+        ]
+      ],
+      "accuracy": 0.7859603789836348,
+      "balanced_accuracy": 0.7722869993382555,
+      "macro_f1": 0.7536470555280073,
+      "cohen_kappa": 0.7193815609573013,
+      "recall": {
+        "W": 0.8711453744493393,
+        "N1": 0.4724576271186441,
+        "N2": 0.7434354485776805,
+        "N3": 0.8954393770856507,
+        "REM": 0.8789571694599627
+      },
+      "precision": {
+        "W": 0.904,
+        "N1": 0.3500784929356358,
+        "N2": 0.8739549839228296,
+        "N3": 0.8769063180827886,
+        "REM": 0.716236722306525
+      },
+      "f1": {
+        "W": 0.8872686483454851,
+        "N1": 0.40216411181244366,
+        "N2": 0.803428909252143,
+        "N3": 0.8860759493670886,
+        "REM": 0.7892976588628763
+      },
+      "support": {
+        "W": 908,
+        "N1": 472,
+        "N2": 1828,
+        "N3": 899,
+        "REM": 537
+      },
+      "brier_score": 0.3044350896022507,
+      "ece_10_bins": 0.04504926382057835,
+      "probabilities_calibrated": false
+    },
+    "per_subject": {
+      "EPCTL07": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 886,
+        "confusion_matrix": [
+          [
+            104,
+            2,
+            1,
+            1,
+            4
+          ],
+          [
+            11,
+            30,
+            7,
+            0,
+            46
+          ],
+          [
+            7,
+            158,
+            191,
+            4,
+            35
+          ],
+          [
+            0,
+            0,
+            36,
+            145,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            103
+          ]
+        ],
+        "accuracy": 0.6467268623024831,
+        "balanced_accuracy": 0.7045508512598831,
+        "macro_f1": 0.6568671155060244,
+        "cohen_kappa": 0.5482191410367315,
+        "recall": {
+          "W": 0.9285714285714286,
+          "N1": 0.3191489361702128,
+          "N2": 0.4835443037974684,
+          "N3": 0.8011049723756906,
+          "REM": 0.9903846153846154
+        },
+        "precision": {
+          "W": 0.8455284552845529,
+          "N1": 0.15789473684210525,
+          "N2": 0.8127659574468085,
+          "N3": 0.9666666666666667,
+          "REM": 0.5478723404255319
+        },
+        "f1": {
+          "W": 0.8851063829787233,
+          "N1": 0.2112676056338028,
+          "N2": 0.6063492063492063,
+          "N3": 0.8761329305135952,
+          "REM": 0.7054794520547946
+        },
+        "support": {
+          "W": 112,
+          "N1": 94,
+          "N2": 395,
+          "N3": 181,
+          "REM": 104
+        },
+        "brier_score": 0.4708703206962668,
+        "ece_10_bins": 0.11364371684415615,
+        "probabilities_calibrated": false
+      },
+      "EPCTL12": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 746,
+        "confusion_matrix": [
+          [
+            159,
+            4,
+            0,
+            1,
+            0
+          ],
+          [
+            6,
+            35,
+            32,
+            0,
+            1
+          ],
+          [
+            0,
+            12,
+            224,
+            17,
+            0
+          ],
+          [
+            0,
+            2,
+            17,
+            153,
+            2
+          ],
+          [
+            1,
+            16,
+            2,
+            0,
+            62
+          ]
+        ],
+        "accuracy": 0.8485254691689008,
+        "balanced_accuracy": 0.7945206211518178,
+        "macro_f1": 0.8075806583727966,
+        "cohen_kappa": 0.7990953116360655,
+        "recall": {
+          "W": 0.9695121951219512,
+          "N1": 0.47297297297297297,
+          "N2": 0.8853754940711462,
+          "N3": 0.8793103448275862,
+          "REM": 0.7654320987654321
+        },
+        "precision": {
+          "W": 0.9578313253012049,
+          "N1": 0.5072463768115942,
+          "N2": 0.8145454545454546,
+          "N3": 0.8947368421052632,
+          "REM": 0.9538461538461539
+        },
+        "f1": {
+          "W": 0.9636363636363636,
+          "N1": 0.48951048951048953,
+          "N2": 0.8484848484848485,
+          "N3": 0.8869565217391304,
+          "REM": 0.8493150684931506
+        },
+        "support": {
+          "W": 164,
+          "N1": 74,
+          "N2": 253,
+          "N3": 174,
+          "REM": 81
+        },
+        "brier_score": 0.2329736055882424,
+        "ece_10_bins": 0.05183921394814754,
+        "probabilities_calibrated": false
+      },
+      "EPCTL18": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 463,
+        "confusion_matrix": [
+          [
+            153,
+            0,
+            1,
+            0,
+            2
+          ],
+          [
+            6,
+            26,
+            1,
+            0,
+            6
+          ],
+          [
+            3,
+            7,
+            116,
+            10,
+            0
+          ],
+          [
+            0,
+            1,
+            3,
+            93,
+            0
+          ],
+          [
+            0,
+            4,
+            1,
+            0,
+            30
+          ]
+        ],
+        "accuracy": 0.9028077753779697,
+        "balanced_accuracy": 0.8632565635294561,
+        "macro_f1": 0.8577462881377601,
+        "cohen_kappa": 0.8695382650185971,
+        "recall": {
+          "W": 0.9807692307692307,
+          "N1": 0.6666666666666666,
+          "N2": 0.8529411764705882,
+          "N3": 0.9587628865979382,
+          "REM": 0.8571428571428571
+        },
+        "precision": {
+          "W": 0.9444444444444444,
+          "N1": 0.6842105263157895,
+          "N2": 0.9508196721311475,
+          "N3": 0.9029126213592233,
+          "REM": 0.7894736842105263
+        },
+        "f1": {
+          "W": 0.9622641509433962,
+          "N1": 0.6753246753246753,
+          "N2": 0.8992248062015504,
+          "N3": 0.93,
+          "REM": 0.821917808219178
+        },
+        "support": {
+          "W": 156,
+          "N1": 39,
+          "N2": 136,
+          "N3": 97,
+          "REM": 35
+        },
+        "brier_score": 0.1472819375265252,
+        "ece_10_bins": 0.015399065633057037,
+        "probabilities_calibrated": false
+      },
+      "EPCTL20": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 924,
+        "confusion_matrix": [
+          [
+            58,
+            5,
+            4,
+            0,
+            2
+          ],
+          [
+            7,
+            60,
+            12,
+            0,
+            15
+          ],
+          [
+            3,
+            34,
+            403,
+            32,
+            0
+          ],
+          [
+            0,
+            0,
+            23,
+            126,
+            0
+          ],
+          [
+            6,
+            13,
+            2,
+            0,
+            119
+          ]
+        ],
+        "accuracy": 0.829004329004329,
+        "balanced_accuracy": 0.8056657451400009,
+        "macro_f1": 0.7913582985812198,
+        "cohen_kappa": 0.7508634930169694,
+        "recall": {
+          "W": 0.8405797101449275,
+          "N1": 0.6382978723404256,
+          "N2": 0.8538135593220338,
+          "N3": 0.8456375838926175,
+          "REM": 0.85
+        },
+        "precision": {
+          "W": 0.7837837837837838,
+          "N1": 0.5357142857142857,
+          "N2": 0.9076576576576577,
+          "N3": 0.7974683544303798,
+          "REM": 0.875
+        },
+        "f1": {
+          "W": 0.8111888111888111,
+          "N1": 0.5825242718446602,
+          "N2": 0.8799126637554585,
+          "N3": 0.8208469055374593,
+          "REM": 0.8623188405797102
+        },
+        "support": {
+          "W": 69,
+          "N1": 94,
+          "N2": 472,
+          "N3": 149,
+          "REM": 140
+        },
+        "brier_score": 0.25097729846981864,
+        "ece_10_bins": 0.03296941883249199,
+        "probabilities_calibrated": false
+      },
+      "EPCTL23": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 810,
+        "confusion_matrix": [
+          [
+            136,
+            42,
+            2,
+            0,
+            26
+          ],
+          [
+            6,
+            41,
+            32,
+            0,
+            24
+          ],
+          [
+            6,
+            48,
+            212,
+            25,
+            8
+          ],
+          [
+            2,
+            0,
+            6,
+            114,
+            0
+          ],
+          [
+            1,
+            7,
+            0,
+            0,
+            72
+          ]
+        ],
+        "accuracy": 0.7098765432098766,
+        "balanced_accuracy": 0.7203417514054221,
+        "macro_f1": 0.6861882421033269,
+        "cohen_kappa": 0.6253498506123124,
+        "recall": {
+          "W": 0.6601941747572816,
+          "N1": 0.39805825242718446,
+          "N2": 0.7090301003344481,
+          "N3": 0.9344262295081968,
+          "REM": 0.9
+        },
+        "precision": {
+          "W": 0.9006622516556292,
+          "N1": 0.2971014492753623,
+          "N2": 0.8412698412698413,
+          "N3": 0.8201438848920863,
+          "REM": 0.5538461538461539
+        },
+        "f1": {
+          "W": 0.7619047619047619,
+          "N1": 0.34024896265560167,
+          "N2": 0.7695099818511797,
+          "N3": 0.8735632183908046,
+          "REM": 0.6857142857142857
+        },
+        "support": {
+          "W": 206,
+          "N1": 103,
+          "N2": 299,
+          "N3": 122,
+          "REM": 80
+        },
+        "brier_score": 0.418537215334967,
+        "ece_10_bins": 0.0687989840536942,
+        "probabilities_calibrated": false
+      },
+      "EPCTL29": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 815,
+        "confusion_matrix": [
+          [
+            181,
+            18,
+            0,
+            0,
+            2
+          ],
+          [
+            11,
+            31,
+            12,
+            0,
+            14
+          ],
+          [
+            3,
+            34,
+            213,
+            23,
+            0
+          ],
+          [
+            0,
+            0,
+            2,
+            174,
+            0
+          ],
+          [
+            4,
+            7,
+            0,
+            0,
+            86
+          ]
+        ],
+        "accuracy": 0.8404907975460123,
+        "balanced_accuracy": 0.8023667894758922,
+        "macro_f1": 0.7893405085290025,
+        "cohen_kappa": 0.792892063436213,
+        "recall": {
+          "W": 0.900497512437811,
+          "N1": 0.45588235294117646,
+          "N2": 0.7802197802197802,
+          "N3": 0.9886363636363636,
+          "REM": 0.8865979381443299
+        },
+        "precision": {
+          "W": 0.9095477386934674,
+          "N1": 0.34444444444444444,
+          "N2": 0.9383259911894273,
+          "N3": 0.883248730964467,
+          "REM": 0.8431372549019608
+        },
+        "f1": {
+          "W": 0.905,
+          "N1": 0.3924050632911392,
+          "N2": 0.852,
+          "N3": 0.9329758713136729,
+          "REM": 0.864321608040201
+        },
+        "support": {
+          "W": 201,
+          "N1": 68,
+          "N2": 273,
+          "N3": 176,
+          "REM": 97
+        },
+        "brier_score": 0.22539562812872918,
+        "ece_10_bins": 0.021346394416013374,
+        "probabilities_calibrated": false
+      }
+    },
+    "cpu_contract_validation": {
+      "output_shape": [
+        1,
+        5
+      ],
+      "finite_logits": true,
+      "strict_state_dict": true
+    },
+    "environment": {
+      "python": "3.12.4",
+      "torch": "2.6.0+cu124",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "mne": "1.10.2"
+    }
+  },
+  "cap8": {
+    "settings": {
+      "seed": 42,
+      "epochs": 30,
+      "patience": 7,
+      "batch_size": 32,
+      "dataset_fingerprint": "56f01a1e5e046398c7aea5de6d21f92eeb00c0c79f05c0ce4e06bacbdbe8824f"
+    },
+    "best_epoch": 17,
+    "best_validation_macro_f1": 0.813281746387093,
+    "training_seconds": 195.78099999998813,
+    "training_class_counts": [
+      2288,
+      1373,
+      5679,
+      2412,
+      1735
+    ],
+    "device": "cuda",
+    "epochs_completed": 24,
+    "classes": [
+      "W",
+      "N1",
+      "N2",
+      "N3",
+      "REM"
+    ],
+    "channels": [
+      "Fp1",
+      "Fp2",
+      "C3",
+      "C4",
+      "P7",
+      "P8",
+      "O1",
+      "O2"
+    ],
+    "pipeline": {
+      "version": "cap-waveform-five-stage-v1",
+      "channels": [
+        "Fp1",
+        "Fp2",
+        "C3",
+        "C4",
+        "P7",
+        "P8",
+        "O1",
+        "O2"
+      ],
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "sample_rate_hz": 250,
+      "window_seconds": 30,
+      "past_context_seconds": 10,
+      "resampling": "scipy.resample_poly, default Kaiser window; context+epoch buffer only",
+      "filter": "causal scipy SOS: iirnotch(50Hz,Q30), butter(4,[0.5,35]Hz)",
+      "filter_initialization": "zero-state per 40-second context+epoch buffer; discard first 10 seconds",
+      "reference": "selected montage average after temporal filtering",
+      "input_unit": "uV",
+      "input_scale_uv": 100.0,
+      "normalization": "divide referenced uV by 100; no subject/night fitted statistics",
+      "qc": {
+        "maximum_filtered_ptp_uv": 500.0,
+        "minimum_filtered_std_uv": 0.1,
+        "flat_second_std_uv": 0.1,
+        "max_flat_seconds": 2,
+        "require_all_16_clean": false,
+        "required_clean_channels": [
+          "Fp1",
+          "Fp2",
+          "C3",
+          "C4",
+          "P7",
+          "P8",
+          "O1",
+          "O2"
+        ],
+        "scope": "selected electrodes only, before average reference"
+      },
+      "scope": "Manual W/N1/N2/N3/R labels; R and REM map to REM; L excluded.",
+      "deployment": "research_only; real-device reference and domain validation pending"
+    },
+    "subject_split": {
+      "test": [
+        "EPCTL07",
+        "EPCTL12",
+        "EPCTL18",
+        "EPCTL20",
+        "EPCTL23",
+        "EPCTL29"
+      ],
+      "validation": [
+        "EPCTL06",
+        "EPCTL11",
+        "EPCTL13",
+        "EPCTL14",
+        "EPCTL16",
+        "EPCTL26"
+      ],
+      "train": [
+        "EPCTL01",
+        "EPCTL02",
+        "EPCTL03",
+        "EPCTL04",
+        "EPCTL05",
+        "EPCTL09",
+        "EPCTL10",
+        "EPCTL15",
+        "EPCTL17",
+        "EPCTL19",
+        "EPCTL21",
+        "EPCTL22",
+        "EPCTL24",
+        "EPCTL25",
+        "EPCTL27",
+        "EPCTL28"
+      ]
+    },
+    "test": {
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "n_epochs": 4639,
+      "confusion_matrix": [
+        [
+          708,
+          163,
+          7,
+          2,
+          27
+        ],
+        [
+          18,
+          212,
+          112,
+          0,
+          129
+        ],
+        [
+          6,
+          157,
+          1469,
+          146,
+          49
+        ],
+        [
+          1,
+          2,
+          61,
+          832,
+          2
+        ],
+        [
+          2,
+          50,
+          4,
+          0,
+          480
+        ]
+      ],
+      "accuracy": 0.7978012502694546,
+      "balanced_accuracy": 0.7713555222106928,
+      "macro_f1": 0.7559031194098642,
+      "cohen_kappa": 0.7332127797210953,
+      "recall": {
+        "W": 0.7805953693495039,
+        "N1": 0.45010615711252655,
+        "N2": 0.8040503557744937,
+        "N3": 0.9265033407572383,
+        "REM": 0.8955223880597015
+      },
+      "precision": {
+        "W": 0.963265306122449,
+        "N1": 0.363013698630137,
+        "N2": 0.8886872353297036,
+        "N3": 0.8489795918367347,
+        "REM": 0.6986899563318777
+      },
+      "f1": {
+        "W": 0.8623629719853837,
+        "N1": 0.4018957345971564,
+        "N2": 0.8442528735632184,
+        "N3": 0.88604898828541,
+        "REM": 0.7849550286181521
+      },
+      "support": {
+        "W": 907,
+        "N1": 471,
+        "N2": 1827,
+        "N3": 898,
+        "REM": 536
+      },
+      "brier_score": 0.2935924891484764,
+      "ece_10_bins": 0.0710395632259906,
+      "probabilities_calibrated": false
+    },
+    "per_subject": {
+      "EPCTL07": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 885,
+        "confusion_matrix": [
+          [
+            74,
+            22,
+            2,
+            1,
+            11
+          ],
+          [
+            1,
+            25,
+            22,
+            0,
+            47
+          ],
+          [
+            1,
+            66,
+            270,
+            24,
+            34
+          ],
+          [
+            0,
+            0,
+            15,
+            166,
+            0
+          ],
+          [
+            0,
+            2,
+            0,
+            0,
+            102
+          ]
+        ],
+        "accuracy": 0.7197740112994351,
+        "balanced_accuracy": 0.7034651547708037,
+        "macro_f1": 0.6755752988081414,
+        "cohen_kappa": 0.626186688649006,
+        "recall": {
+          "W": 0.6727272727272727,
+          "N1": 0.2631578947368421,
+          "N2": 0.6835443037974683,
+          "N3": 0.9171270718232044,
+          "REM": 0.9807692307692307
+        },
+        "precision": {
+          "W": 0.9736842105263158,
+          "N1": 0.21739130434782608,
+          "N2": 0.8737864077669902,
+          "N3": 0.8691099476439791,
+          "REM": 0.5257731958762887
+        },
+        "f1": {
+          "W": 0.7956989247311828,
+          "N1": 0.23809523809523808,
+          "N2": 0.7670454545454546,
+          "N3": 0.8924731182795699,
+          "REM": 0.6845637583892618
+        },
+        "support": {
+          "W": 110,
+          "N1": 95,
+          "N2": 395,
+          "N3": 181,
+          "REM": 104
+        },
+        "brier_score": 0.39058857596250496,
+        "ece_10_bins": 0.0952347527116032,
+        "probabilities_calibrated": false
+      },
+      "EPCTL12": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 741,
+        "confusion_matrix": [
+          [
+            151,
+            8,
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            33,
+            27,
+            0,
+            12
+          ],
+          [
+            0,
+            7,
+            219,
+            20,
+            8
+          ],
+          [
+            0,
+            2,
+            15,
+            155,
+            2
+          ],
+          [
+            0,
+            11,
+            3,
+            0,
+            66
+          ]
+        ],
+        "accuracy": 0.8421052631578947,
+        "balanced_accuracy": 0.7948461708403392,
+        "macro_f1": 0.7959097053438398,
+        "cohen_kappa": 0.7912947395788196,
+        "recall": {
+          "W": 0.937888198757764,
+          "N1": 0.4583333333333333,
+          "N2": 0.8622047244094488,
+          "N3": 0.8908045977011494,
+          "REM": 0.825
+        },
+        "precision": {
+          "W": 1.0,
+          "N1": 0.5409836065573771,
+          "N2": 0.8264150943396227,
+          "N3": 0.8806818181818182,
+          "REM": 0.75
+        },
+        "f1": {
+          "W": 0.967948717948718,
+          "N1": 0.49624060150375937,
+          "N2": 0.8439306358381503,
+          "N3": 0.8857142857142857,
+          "REM": 0.7857142857142857
+        },
+        "support": {
+          "W": 161,
+          "N1": 72,
+          "N2": 254,
+          "N3": 174,
+          "REM": 80
+        },
+        "brier_score": 0.2261502791984725,
+        "ece_10_bins": 0.05178629169579943,
+        "probabilities_calibrated": false
+      },
+      "EPCTL18": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 470,
+        "confusion_matrix": [
+          [
+            152,
+            11,
+            0,
+            0,
+            0
+          ],
+          [
+            3,
+            31,
+            1,
+            0,
+            4
+          ],
+          [
+            0,
+            5,
+            123,
+            8,
+            0
+          ],
+          [
+            0,
+            0,
+            4,
+            93,
+            0
+          ],
+          [
+            0,
+            2,
+            1,
+            0,
+            32
+          ]
+        ],
+        "accuracy": 0.9170212765957447,
+        "balanced_accuracy": 0.9009694995769285,
+        "macro_f1": 0.8859249148406736,
+        "cohen_kappa": 0.888991842444723,
+        "recall": {
+          "W": 0.9325153374233128,
+          "N1": 0.7948717948717948,
+          "N2": 0.9044117647058824,
+          "N3": 0.9587628865979382,
+          "REM": 0.9142857142857143
+        },
+        "precision": {
+          "W": 0.9806451612903225,
+          "N1": 0.6326530612244898,
+          "N2": 0.9534883720930233,
+          "N3": 0.9207920792079208,
+          "REM": 0.8888888888888888
+        },
+        "f1": {
+          "W": 0.9559748427672956,
+          "N1": 0.7045454545454546,
+          "N2": 0.9283018867924528,
+          "N3": 0.9393939393939394,
+          "REM": 0.9014084507042254
+        },
+        "support": {
+          "W": 163,
+          "N1": 39,
+          "N2": 136,
+          "N3": 97,
+          "REM": 35
+        },
+        "brier_score": 0.11904315254965127,
+        "ece_10_bins": 0.023337952253666316,
+        "probabilities_calibrated": false
+      },
+      "EPCTL20": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 921,
+        "confusion_matrix": [
+          [
+            42,
+            17,
+            3,
+            0,
+            7
+          ],
+          [
+            0,
+            56,
+            6,
+            0,
+            31
+          ],
+          [
+            0,
+            43,
+            391,
+            32,
+            5
+          ],
+          [
+            0,
+            0,
+            23,
+            125,
+            0
+          ],
+          [
+            0,
+            12,
+            0,
+            0,
+            128
+          ]
+        ],
+        "accuracy": 0.8056460369163952,
+        "balanced_accuracy": 0.7599750237292335,
+        "macro_f1": 0.7562175403129607,
+        "cohen_kappa": 0.7191642675842802,
+        "recall": {
+          "W": 0.6086956521739131,
+          "N1": 0.6021505376344086,
+          "N2": 0.8301486199575372,
+          "N3": 0.8445945945945946,
+          "REM": 0.9142857142857143
+        },
+        "precision": {
+          "W": 1.0,
+          "N1": 0.4375,
+          "N2": 0.9243498817966903,
+          "N3": 0.7961783439490446,
+          "REM": 0.7485380116959064
+        },
+        "f1": {
+          "W": 0.7567567567567568,
+          "N1": 0.5067873303167421,
+          "N2": 0.8747203579418344,
+          "N3": 0.819672131147541,
+          "REM": 0.8231511254019293
+        },
+        "support": {
+          "W": 69,
+          "N1": 93,
+          "N2": 471,
+          "N3": 148,
+          "REM": 140
+        },
+        "brier_score": 0.2848280990512606,
+        "ece_10_bins": 0.04705489775515794,
+        "probabilities_calibrated": false
+      },
+      "EPCTL23": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 816,
+        "confusion_matrix": [
+          [
+            119,
+            82,
+            1,
+            0,
+            9
+          ],
+          [
+            6,
+            32,
+            42,
+            0,
+            24
+          ],
+          [
+            5,
+            22,
+            241,
+            29,
+            2
+          ],
+          [
+            1,
+            0,
+            3,
+            118,
+            0
+          ],
+          [
+            1,
+            9,
+            0,
+            0,
+            70
+          ]
+        ],
+        "accuracy": 0.7107843137254902,
+        "balanced_accuracy": 0.7039813063980134,
+        "macro_f1": 0.6815022875141876,
+        "cohen_kappa": 0.6229744095759989,
+        "recall": {
+          "W": 0.5639810426540285,
+          "N1": 0.3076923076923077,
+          "N2": 0.8060200668896321,
+          "N3": 0.9672131147540983,
+          "REM": 0.875
+        },
+        "precision": {
+          "W": 0.9015151515151515,
+          "N1": 0.2206896551724138,
+          "N2": 0.8397212543554007,
+          "N3": 0.8027210884353742,
+          "REM": 0.6666666666666666
+        },
+        "f1": {
+          "W": 0.6938775510204082,
+          "N1": 0.2570281124497992,
+          "N2": 0.8225255972696246,
+          "N3": 0.8773234200743495,
+          "REM": 0.7567567567567568
+        },
+        "support": {
+          "W": 211,
+          "N1": 104,
+          "N2": 299,
+          "N3": 122,
+          "REM": 80
+        },
+        "brier_score": 0.430718476282738,
+        "ece_10_bins": 0.1586943544885691,
+        "probabilities_calibrated": false
+      },
+      "EPCTL29": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 806,
+        "confusion_matrix": [
+          [
+            170,
+            23,
+            0,
+            0,
+            0
+          ],
+          [
+            8,
+            35,
+            14,
+            0,
+            11
+          ],
+          [
+            0,
+            14,
+            225,
+            33,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            175,
+            0
+          ],
+          [
+            1,
+            14,
+            0,
+            0,
+            82
+          ]
+        ],
+        "accuracy": 0.8523573200992556,
+        "balanced_accuracy": 0.8124839573620747,
+        "macro_f1": 0.8044092854478571,
+        "cohen_kappa": 0.8075299198124944,
+        "recall": {
+          "W": 0.8808290155440415,
+          "N1": 0.5147058823529411,
+          "N2": 0.8272058823529411,
+          "N3": 0.9943181818181818,
+          "REM": 0.845360824742268
+        },
+        "precision": {
+          "W": 0.9497206703910615,
+          "N1": 0.4069767441860465,
+          "N2": 0.9375,
+          "N3": 0.8413461538461539,
+          "REM": 0.8817204301075269
+        },
+        "f1": {
+          "W": 0.9139784946236559,
+          "N1": 0.45454545454545453,
+          "N2": 0.87890625,
+          "N3": 0.9114583333333334,
+          "REM": 0.8631578947368421
+        },
+        "support": {
+          "W": 193,
+          "N1": 68,
+          "N2": 272,
+          "N3": 176,
+          "REM": 97
+        },
+        "brier_score": 0.22206460666952338,
+        "ece_10_bins": 0.04616593974399803,
+        "probabilities_calibrated": false
+      }
+    },
+    "cpu_contract_validation": {
+      "output_shape": [
+        1,
+        5
+      ],
+      "finite_logits": true,
+      "strict_state_dict": true
+    },
+    "environment": {
+      "python": "3.12.4",
+      "torch": "2.6.0+cu124",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "mne": "1.10.2"
+    }
+  },
+  "cap16": {
+    "settings": {
+      "seed": 42,
+      "epochs": 30,
+      "patience": 7,
+      "batch_size": 32,
+      "dataset_fingerprint": "b7dd4253e315ef7421853b227e3b7bc815bf72bfa78ccfdc640e71236227ec92"
+    },
+    "best_epoch": 7,
+    "best_validation_macro_f1": 0.8054706596906778,
+    "training_seconds": 207.40600000000268,
+    "training_class_counts": [
+      2206,
+      1355,
+      5614,
+      2409,
+      1723
+    ],
+    "device": "cuda",
+    "epochs_completed": 14,
+    "classes": [
+      "W",
+      "N1",
+      "N2",
+      "N3",
+      "REM"
+    ],
+    "channels": [
+      "Fp1",
+      "Fp2",
+      "C3",
+      "C4",
+      "P7",
+      "P8",
+      "O1",
+      "O2",
+      "F7",
+      "F8",
+      "F3",
+      "F4",
+      "T7",
+      "T8",
+      "P3",
+      "P4"
+    ],
+    "pipeline": {
+      "version": "cap-waveform-five-stage-v1",
+      "channels": [
+        "Fp1",
+        "Fp2",
+        "C3",
+        "C4",
+        "P7",
+        "P8",
+        "O1",
+        "O2",
+        "F7",
+        "F8",
+        "F3",
+        "F4",
+        "T7",
+        "T8",
+        "P3",
+        "P4"
+      ],
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "sample_rate_hz": 250,
+      "window_seconds": 30,
+      "past_context_seconds": 10,
+      "resampling": "scipy.resample_poly, default Kaiser window; context+epoch buffer only",
+      "filter": "causal scipy SOS: iirnotch(50Hz,Q30), butter(4,[0.5,35]Hz)",
+      "filter_initialization": "zero-state per 40-second context+epoch buffer; discard first 10 seconds",
+      "reference": "selected montage average after temporal filtering",
+      "input_unit": "uV",
+      "input_scale_uv": 100.0,
+      "normalization": "divide referenced uV by 100; no subject/night fitted statistics",
+      "qc": {
+        "maximum_filtered_ptp_uv": 500.0,
+        "minimum_filtered_std_uv": 0.1,
+        "flat_second_std_uv": 0.1,
+        "max_flat_seconds": 2,
+        "require_all_16_clean": false,
+        "required_clean_channels": [
+          "Fp1",
+          "Fp2",
+          "C3",
+          "C4",
+          "P7",
+          "P8",
+          "O1",
+          "O2",
+          "F7",
+          "F8",
+          "F3",
+          "F4",
+          "T7",
+          "T8",
+          "P3",
+          "P4"
+        ],
+        "scope": "selected electrodes only, before average reference"
+      },
+      "scope": "Manual W/N1/N2/N3/R labels; R and REM map to REM; L excluded.",
+      "deployment": "research_only; real-device reference and domain validation pending"
+    },
+    "subject_split": {
+      "test": [
+        "EPCTL07",
+        "EPCTL12",
+        "EPCTL18",
+        "EPCTL20",
+        "EPCTL23",
+        "EPCTL29"
+      ],
+      "validation": [
+        "EPCTL06",
+        "EPCTL11",
+        "EPCTL13",
+        "EPCTL14",
+        "EPCTL16",
+        "EPCTL26"
+      ],
+      "train": [
+        "EPCTL01",
+        "EPCTL02",
+        "EPCTL03",
+        "EPCTL04",
+        "EPCTL05",
+        "EPCTL09",
+        "EPCTL10",
+        "EPCTL15",
+        "EPCTL17",
+        "EPCTL19",
+        "EPCTL21",
+        "EPCTL22",
+        "EPCTL24",
+        "EPCTL25",
+        "EPCTL27",
+        "EPCTL28"
+      ]
+    },
+    "test": {
+      "classes": [
+        "W",
+        "N1",
+        "N2",
+        "N3",
+        "REM"
+      ],
+      "n_epochs": 4615,
+      "confusion_matrix": [
+        [
+          698,
+          121,
+          6,
+          1,
+          62
+        ],
+        [
+          19,
+          232,
+          69,
+          0,
+          148
+        ],
+        [
+          5,
+          266,
+          1361,
+          127,
+          66
+        ],
+        [
+          1,
+          1,
+          71,
+          822,
+          3
+        ],
+        [
+          3,
+          43,
+          0,
+          0,
+          490
+        ]
+      ],
+      "accuracy": 0.780715059588299,
+      "balanced_accuracy": 0.7714125088387783,
+      "macro_f1": 0.7465366542651399,
+      "cohen_kappa": 0.7139596075232669,
+      "recall": {
+        "W": 0.786036036036036,
+        "N1": 0.49572649572649574,
+        "N2": 0.7457534246575342,
+        "N3": 0.9153674832962138,
+        "REM": 0.914179104477612
+      },
+      "precision": {
+        "W": 0.9614325068870524,
+        "N1": 0.34992458521870284,
+        "N2": 0.9031187790311878,
+        "N3": 0.8652631578947368,
+        "REM": 0.6371911573472041
+      },
+      "f1": {
+        "W": 0.8649318463444857,
+        "N1": 0.41025641025641024,
+        "N2": 0.8169267707082833,
+        "N3": 0.8896103896103896,
+        "REM": 0.7509578544061303
+      },
+      "support": {
+        "W": 888,
+        "N1": 468,
+        "N2": 1825,
+        "N3": 898,
+        "REM": 536
+      },
+      "brier_score": 0.3072971601919616,
+      "ece_10_bins": 0.029850793059184755,
+      "probabilities_calibrated": false
+    },
+    "per_subject": {
+      "EPCTL07": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 882,
+        "confusion_matrix": [
+          [
+            92,
+            11,
+            3,
+            1,
+            1
+          ],
+          [
+            3,
+            40,
+            16,
+            0,
+            35
+          ],
+          [
+            0,
+            122,
+            238,
+            17,
+            18
+          ],
+          [
+            0,
+            0,
+            22,
+            159,
+            0
+          ],
+          [
+            1,
+            7,
+            0,
+            0,
+            96
+          ]
+        ],
+        "accuracy": 0.7086167800453514,
+        "balanced_accuracy": 0.7362890748132092,
+        "macro_f1": 0.7088673418949946,
+        "cohen_kappa": 0.6176175872225427,
+        "recall": {
+          "W": 0.8518518518518519,
+          "N1": 0.425531914893617,
+          "N2": 0.6025316455696202,
+          "N3": 0.8784530386740331,
+          "REM": 0.9230769230769231
+        },
+        "precision": {
+          "W": 0.9583333333333334,
+          "N1": 0.2222222222222222,
+          "N2": 0.8530465949820788,
+          "N3": 0.8983050847457628,
+          "REM": 0.64
+        },
+        "f1": {
+          "W": 0.9019607843137255,
+          "N1": 0.291970802919708,
+          "N2": 0.7062314540059347,
+          "N3": 0.888268156424581,
+          "REM": 0.7559055118110236
+        },
+        "support": {
+          "W": 108,
+          "N1": 94,
+          "N2": 395,
+          "N3": 181,
+          "REM": 104
+        },
+        "brier_score": 0.38824142903309944,
+        "ece_10_bins": 0.04188328535378385,
+        "probabilities_calibrated": false
+      },
+      "EPCTL12": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 738,
+        "confusion_matrix": [
+          [
+            151,
+            4,
+            1,
+            0,
+            3
+          ],
+          [
+            0,
+            26,
+            16,
+            0,
+            30
+          ],
+          [
+            0,
+            16,
+            197,
+            28,
+            12
+          ],
+          [
+            0,
+            1,
+            12,
+            158,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            80
+          ]
+        ],
+        "accuracy": 0.8292682926829268,
+        "balanced_accuracy": 0.7994997498392028,
+        "macro_f1": 0.7761447716343471,
+        "cohen_kappa": 0.7772577125487161,
+        "recall": {
+          "W": 0.949685534591195,
+          "N1": 0.3611111111111111,
+          "N2": 0.7786561264822134,
+          "N3": 0.9080459770114943,
+          "REM": 1.0
+        },
+        "precision": {
+          "W": 1.0,
+          "N1": 0.5531914893617021,
+          "N2": 0.8716814159292036,
+          "N3": 0.8494623655913979,
+          "REM": 0.625
+        },
+        "f1": {
+          "W": 0.9741935483870968,
+          "N1": 0.4369747899159664,
+          "N2": 0.8225469728601252,
+          "N3": 0.8777777777777778,
+          "REM": 0.7692307692307693
+        },
+        "support": {
+          "W": 159,
+          "N1": 72,
+          "N2": 253,
+          "N3": 174,
+          "REM": 80
+        },
+        "brier_score": 0.24649837325381846,
+        "ece_10_bins": 0.033282347891711916,
+        "probabilities_calibrated": false
+      },
+      "EPCTL18": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 462,
+        "confusion_matrix": [
+          [
+            149,
+            5,
+            0,
+            0,
+            1
+          ],
+          [
+            4,
+            31,
+            1,
+            0,
+            3
+          ],
+          [
+            0,
+            3,
+            130,
+            2,
+            1
+          ],
+          [
+            0,
+            0,
+            4,
+            93,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            34
+          ]
+        ],
+        "accuracy": 0.9458874458874459,
+        "balanced_accuracy": 0.9284471856840252,
+        "macro_f1": 0.9198842214259212,
+        "cohen_kappa": 0.9274629621488546,
+        "recall": {
+          "W": 0.9612903225806452,
+          "N1": 0.7948717948717948,
+          "N2": 0.9558823529411765,
+          "N3": 0.9587628865979382,
+          "REM": 0.9714285714285714
+        },
+        "precision": {
+          "W": 0.9738562091503268,
+          "N1": 0.775,
+          "N2": 0.9629629629629629,
+          "N3": 0.9789473684210527,
+          "REM": 0.8717948717948718
+        },
+        "f1": {
+          "W": 0.9675324675324676,
+          "N1": 0.7848101265822784,
+          "N2": 0.959409594095941,
+          "N3": 0.96875,
+          "REM": 0.918918918918919
+        },
+        "support": {
+          "W": 155,
+          "N1": 39,
+          "N2": 136,
+          "N3": 97,
+          "REM": 35
+        },
+        "brier_score": 0.10119639991752286,
+        "ece_10_bins": 0.04012115435166795,
+        "probabilities_calibrated": false
+      },
+      "EPCTL20": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 919,
+        "confusion_matrix": [
+          [
+            47,
+            19,
+            2,
+            0,
+            1
+          ],
+          [
+            1,
+            68,
+            7,
+            0,
+            16
+          ],
+          [
+            0,
+            49,
+            389,
+            30,
+            2
+          ],
+          [
+            0,
+            0,
+            25,
+            123,
+            0
+          ],
+          [
+            1,
+            23,
+            0,
+            0,
+            116
+          ]
+        ],
+        "accuracy": 0.808487486398259,
+        "balanced_accuracy": 0.7815203878386118,
+        "macro_f1": 0.7741151109324302,
+        "cohen_kappa": 0.7240795772077011,
+        "recall": {
+          "W": 0.6811594202898551,
+          "N1": 0.7391304347826086,
+          "N2": 0.8276595744680851,
+          "N3": 0.831081081081081,
+          "REM": 0.8285714285714286
+        },
+        "precision": {
+          "W": 0.9591836734693877,
+          "N1": 0.4276729559748428,
+          "N2": 0.9196217494089834,
+          "N3": 0.803921568627451,
+          "REM": 0.8592592592592593
+        },
+        "f1": {
+          "W": 0.7966101694915254,
+          "N1": 0.5418326693227091,
+          "N2": 0.8712206047032475,
+          "N3": 0.8172757475083057,
+          "REM": 0.8436363636363636
+        },
+        "support": {
+          "W": 69,
+          "N1": 92,
+          "N2": 470,
+          "N3": 148,
+          "REM": 140
+        },
+        "brier_score": 0.2670265905430699,
+        "ece_10_bins": 0.021521591549988554,
+        "probabilities_calibrated": false
+      },
+      "EPCTL23": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 810,
+        "confusion_matrix": [
+          [
+            96,
+            54,
+            0,
+            0,
+            56
+          ],
+          [
+            5,
+            26,
+            20,
+            0,
+            52
+          ],
+          [
+            5,
+            52,
+            184,
+            25,
+            33
+          ],
+          [
+            1,
+            0,
+            7,
+            114,
+            0
+          ],
+          [
+            1,
+            1,
+            0,
+            0,
+            78
+          ]
+        ],
+        "accuracy": 0.6148148148148148,
+        "balanced_accuracy": 0.648651489366912,
+        "macro_f1": 0.5897349854960562,
+        "cohen_kappa": 0.5164049553566303,
+        "recall": {
+          "W": 0.46601941747572817,
+          "N1": 0.2524271844660194,
+          "N2": 0.6153846153846154,
+          "N3": 0.9344262295081968,
+          "REM": 0.975
+        },
+        "precision": {
+          "W": 0.8888888888888888,
+          "N1": 0.19548872180451127,
+          "N2": 0.8720379146919431,
+          "N3": 0.8201438848920863,
+          "REM": 0.3561643835616438
+        },
+        "f1": {
+          "W": 0.6114649681528662,
+          "N1": 0.22033898305084745,
+          "N2": 0.7215686274509804,
+          "N3": 0.8735632183908046,
+          "REM": 0.5217391304347826
+        },
+        "support": {
+          "W": 206,
+          "N1": 103,
+          "N2": 299,
+          "N3": 122,
+          "REM": 80
+        },
+        "brier_score": 0.5274076002915083,
+        "ece_10_bins": 0.13845698391949687,
+        "probabilities_calibrated": false
+      },
+      "EPCTL29": {
+        "classes": [
+          "W",
+          "N1",
+          "N2",
+          "N3",
+          "REM"
+        ],
+        "n_epochs": 804,
+        "confusion_matrix": [
+          [
+            163,
+            28,
+            0,
+            0,
+            0
+          ],
+          [
+            6,
+            41,
+            9,
+            0,
+            12
+          ],
+          [
+            0,
+            24,
+            223,
+            25,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            175,
+            0
+          ],
+          [
+            0,
+            11,
+            0,
+            0,
+            86
+          ]
+        ],
+        "accuracy": 0.8557213930348259,
+        "balanced_accuracy": 0.8314226757941654,
+        "macro_f1": 0.8156740808629639,
+        "cohen_kappa": 0.813091828779738,
+        "recall": {
+          "W": 0.8534031413612565,
+          "N1": 0.6029411764705882,
+          "N2": 0.8198529411764706,
+          "N3": 0.9943181818181818,
+          "REM": 0.8865979381443299
+        },
+        "precision": {
+          "W": 0.9644970414201184,
+          "N1": 0.3942307692307692,
+          "N2": 0.9570815450643777,
+          "N3": 0.875,
+          "REM": 0.8775510204081632
+        },
+        "f1": {
+          "W": 0.9055555555555556,
+          "N1": 0.47674418604651164,
+          "N2": 0.8831683168316832,
+          "N3": 0.9308510638297872,
+          "REM": 0.882051282051282
+        },
+        "support": {
+          "W": 191,
+          "N1": 68,
+          "N2": 272,
+          "N3": 176,
+          "REM": 97
+        },
+        "brier_score": 0.21701657302275215,
+        "ece_10_bins": 0.02635198898279846,
+        "probabilities_calibrated": false
+      }
+    },
+    "cpu_contract_validation": {
+      "output_shape": [
+        1,
+        5
+      ],
+      "finite_logits": true,
+      "strict_state_dict": true
+    },
+    "environment": {
+      "python": "3.12.4",
+      "torch": "2.6.0+cu124",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "mne": "1.10.2"
+    }
+  }
+}

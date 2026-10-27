@@ -1,0 +1,36 @@
+{
+  "test": [
+    "EPCTL07",
+    "EPCTL12",
+    "EPCTL18",
+    "EPCTL20",
+    "EPCTL23",
+    "EPCTL29"
+  ],
+  "validation": [
+    "EPCTL06",
+    "EPCTL11",
+    "EPCTL13",
+    "EPCTL14",
+    "EPCTL16",
+    "EPCTL26"
+  ],
+  "train": [
+    "EPCTL01",
+    "EPCTL02",
+    "EPCTL03",
+    "EPCTL04",
+    "EPCTL05",
+    "EPCTL09",
+    "EPCTL10",
+    "EPCTL15",
+    "EPCTL17",
+    "EPCTL19",
+    "EPCTL21",
+    "EPCTL22",
+    "EPCTL24",
+    "EPCTL25",
+    "EPCTL27",
+    "EPCTL28"
+  ]
+}

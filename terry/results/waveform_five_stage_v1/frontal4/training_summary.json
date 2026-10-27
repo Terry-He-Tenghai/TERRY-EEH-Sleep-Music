@@ -1,0 +1,21 @@
+{
+  "settings": {
+    "seed": 42,
+    "epochs": 30,
+    "patience": 7,
+    "batch_size": 32,
+    "dataset_fingerprint": "bce15b57cd314c4b441c6c649da6e9a1152056d08abaadc9f8f1ff11dd930fec"
+  },
+  "best_epoch": 10,
+  "best_validation_macro_f1": 0.7694694923604332,
+  "training_seconds": 79.23500000000058,
+  "training_class_counts": [
+    2336,
+    1377,
+    5684,
+    2412,
+    1736
+  ],
+  "device": "cuda",
+  "epochs_completed": 17
+}

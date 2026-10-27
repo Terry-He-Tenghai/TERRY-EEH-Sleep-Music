@@ -1,4 +1,38 @@
-# 8/16 通道原始波形训练
+# 原始波形训练：独立五分类与旧三分类
+
+## 五分类 W/N1/N2/N3/REM（2026-10-27）
+
+新入口为 `train_sleep_five_stage_models.py`，版本 `cap-waveform-five-stage-v1`。默认输出 `terry/results/waveform_five_stage_v1/`，默认依次训练 `frontal2 frontal4 frontal6`；可用 `--models` 选择 `cap8 cap16`。额区组合沿用 `train_sleep_frontal_models.py`，8/16 路组合沿用原始训练脚本。所有模型均独立训练，最后一层输出五个 logits，类别顺序固定为 `W,N1,N2,N3,REM`。TXT 的 `R` 和 `REM` 均映射为 `REM`，`L` 排除。
+
+原三分类入口、权重、契约及缓存保持原样。五分类拒绝向不带五分类标记的非空目录写入；每个组合使用独立的 `<模型名>/cache/`，指纹包含五分类预处理契约和标注内容。默认读取原 `results/waveform_cap_v1/split.json`，沿用 16/6/6 人的训练/验证/测试划分，并拒绝受试者重叠或与数据集不一致的划分。
+
+EDF 使用 `preload=False`，只读取所选电极的过去 10 秒和当前 30 秒，不加载整夜。因果滤波、250 Hz 采样、所选通道均值重参考和固定 100 µV 缩放沿用旧处理。质量控制只检查该组合所选电极。类别权重只来自训练集；验证集宏平均 F1 用于选择权重和早停；请求的模型全部训练结束后才评估测试集，已完成的匹配测试报告直接保留。
+
+仓库根目录下的完整运行命令（已有运行时勿重复启动）：
+
+```powershell
+.\terry\script\.venv\Scripts\python.exe -u terry/script/train_sleep_five_stage_models.py --dataset "E:\project\test\terry\dataset" --output terry/results/waveform_five_stage_v1 --epochs 30 --batch-size 32 --patience 7
+```
+
+可使用 `--prepare-only` 单独准备、`--train-only` 从完整缓存训练；`--subject EPCTL01 --max-epochs 30 --prepare-only` 仅用于独立烟雾测试目录，截断缓存禁止用于正式训练。中断后重跑会复用已完成受试者缓存和已完成模型；未完成模型从头训练，未实现优化器断点续训。修改数据或训练设置后应使用新目录。
+
+每个模型目录保存 `manifest.json`、`cache/`、`best.pt`、`history.json`、`training_summary.json`、`input_contract.json`、`report.json` 和 `test_predictions.csv`；根目录保存 `five_stage_run.json`、`split.json` 和最终 `comparison.json`。测试报告含 5×5 混淆矩阵、五类 precision/recall/F1、宏平均 F1、平衡准确率、Cohen kappa、Brier score、校准误差和各受试者结果。预测 CSV 包含 `p_W,p_N1,p_N2,p_N3,p_REM`。权重仍标记 `deployment_ready=false`，训练完成与实机或 Max 交互验收需分别确认。
+
+验证命令：
+
+```powershell
+.\terry\script\.venv\Scripts\python.exe -m pytest terry/script/test_sleep_five_stage_models.py -q
+```
+
+截至 2026-10-27 12:13，额区 `frontal2/frontal4/frontal6` 已完成五分类训练及留出测试，宏平均 F1 分别为 0.6567、0.7083、0.7536。16:16 已按用户要求启动 `cap8/cap16` 补训，沿用相同划分与训练设置。命令同时列出已完成的额区组合，以复用其缓存、权重和报告，并在最终 `comparison.json` 中保留五套结果；已完成的匹配模型不会重复训练。8/16 路补训及留出测试已于 17:52 完成，宏平均 F1 分别为 0.7559、0.7465。五套结果均已保存在各自 `report.json` 及根目录 `comparison.json`，当前没有训练任务需要继续运行。
+
+```powershell
+.\terry\script\.venv\Scripts\python.exe -u terry/script/train_sleep_five_stage_models.py --dataset "E:\project\test\terry\dataset" --output terry/results/waveform_five_stage_v1 --models frontal2 frontal4 frontal6 cap8 cap16 --epochs 30 --batch-size 32 --patience 7
+```
+
+已有任务运行时勿重复启动。
+
+## 以下为原三分类 8/16 通道训练说明
 
 > 2026-10-04：额区2/4/6新训练入口 `train_sleep_frontal_models.py`，组合为Fp1/Fp2、Fp1/Fp2/F3/F4、Fp1/Fp2/F3/F4/F7/F8；产物独立保存至 `results/waveform_frontal_v1`。旧中央组合和原8/16契约不覆盖。状态见 `terry/docs/eeg-frontal-model-integration-2026-10-04.md`。
 
