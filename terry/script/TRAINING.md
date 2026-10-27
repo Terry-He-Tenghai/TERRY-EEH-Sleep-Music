@@ -32,6 +32,16 @@ EDF 使用 `preload=False`，只读取所选电极的过去 10 秒和当前 30 �
 
 已有任务运行时勿重复启动。
 
+## Fp1/F4 独立双通道五分类（2026-10-27 20:14 完成）
+
+新增组合名 `fp1_f4`，输入顺序严格为 `Fp1,F4`；与 `frontal2` 的 `Fp1,Fp2` 不同，不覆盖其权重。输出位于 `terry/results/waveform_five_stage_v1/fp1_f4/`，仅检查 Fp1/F4 的质量，沿用五分类标签、所选通道均值重参考及原 16/6/6 人划分。重参考后两路等价于缩放后的正负 Fp1−F4 差分；这是本次训练输入的明确契约，不等于两个独立的参考信号。新增组合及训练流程测试共 8 项通过。
+
+```powershell
+.\terry\script\.venv\Scripts\python.exe -u terry/script/train_sleep_five_stage_models.py --dataset "E:\project\test\terry\dataset" --output terry/results/waveform_five_stage_v1 --models frontal2 frontal4 frontal6 cap8 cap16 fp1_f4 --epochs 30 --batch-size 32 --patience 7
+```
+
+已有五套模型复用缓存与已完成结果，仅新组合需要准备数据和训练。该组合已于 20:14:28 完成训练及留出测试，运行 24 轮后早停，采用第 17 轮最佳权重；验证集宏平均 F1 为 0.7415，6 位独立测试受试者共 4673 个窗口的准确率为 0.7379、宏平均 F1 为 0.7017。权重、输入契约、训练摘要和测试报告随本次模型更新上传，原始数据、波形缓存和逐窗口预测不上传。实时界面的“2 路”仍代表 Fp1/Fp2，本次不会自动更改实时选路；离线测试结果尚未经过实机验证。
+
 ## 以下为原三分类 8/16 通道训练说明
 
 > 2026-10-04：额区2/4/6新训练入口 `train_sleep_frontal_models.py`，组合为Fp1/Fp2、Fp1/Fp2/F3/F4、Fp1/Fp2/F3/F4/F7/F8；产物独立保存至 `results/waveform_frontal_v1`。旧中央组合和原8/16契约不覆盖。状态见 `terry/docs/eeg-frontal-model-integration-2026-10-04.md`。

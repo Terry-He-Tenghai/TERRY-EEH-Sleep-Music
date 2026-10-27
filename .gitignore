@@ -106,6 +106,7 @@ terry/results/waveform_five_stage_v1/*
 !terry/results/waveform_five_stage_v1/frontal[246]/
 !terry/results/waveform_five_stage_v1/cap8/
 !terry/results/waveform_five_stage_v1/cap16/
+!terry/results/waveform_five_stage_v1/fp1_f4/
 terry/results/waveform_five_stage_v1/*/*
 !terry/results/waveform_five_stage_v1/*/best.pt
 !terry/results/waveform_five_stage_v1/*/input_contract.json

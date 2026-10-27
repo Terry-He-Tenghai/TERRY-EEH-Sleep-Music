@@ -28,6 +28,15 @@ def write_cache(root, sid, montage, labels=None, smoke=None):
         "starts_seconds": [30. * (i + 1) for i in range(len(labels))]})
 
 
+def test_fp1_f4_has_independent_channel_contract():
+    assert five.MONTAGES["fp1_f4"] == ("Fp1", "F4")
+    assert five.MONTAGES["frontal2"] == ("Fp1", "Fp2")
+    pipeline = five.pipeline_for("fp1_f4")
+    assert pipeline["channels"] == ["Fp1", "F4"]
+    assert pipeline["qc"]["required_clean_channels"] == ["Fp1", "F4"]
+    assert pipeline != five.pipeline_for("frontal2")
+
+
 def test_labels_metrics_and_invalid_labels():
     assert five.STAGES == ("W", "N1", "N2", "N3", "REM")
     assert five.SOURCE_TO_STAGE["R"] == five.SOURCE_TO_STAGE["REM"] == "REM"

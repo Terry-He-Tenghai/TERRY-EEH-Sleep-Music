@@ -18,7 +18,8 @@ VERSION = "cap-waveform-five-stage-v1"
 STAGES = ("W", "N1", "N2", "N3", "REM")
 SOURCE_TO_STAGE = {"W": "W", "N1": "N1", "N2": "N2", "N3": "N3", "R": "REM", "REM": "REM"}
 MONTAGES = {**{f"frontal{c}": names for c, names in frontal.MONTAGES.items()},
-            "cap8": base.CAP8, "cap16": base.CAP16}
+            "cap8": base.CAP8, "cap16": base.CAP16,
+            "fp1_f4": ("Fp1", "F4")}
 DEFAULT_MODELS = ("frontal2", "frontal4", "frontal6")
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "results/waveform_five_stage_v1"
 
